@@ -1,12 +1,8 @@
 # FocusFinder — A Productivity Tracking Tool, Implementing a Transparent OLED + Pi Camera Module, and Powered by Python OpenCV + Raspberry Pi
-
-<img width="1633" height="999" alt="image" src="https://github.com/user-attachments/assets/f6f684d5-3cc5-4730-a2d7-3b7bf26ac90d" />
-
-
 ### The **FocusFinder** is a small desktop productivity tracker/timer that uses a Transparent OLED with a Pi camera module hidden behind it. The FocusFinder uses Python OpenCV to track focus through face detection. 
 ### The timer will count up if you are focused on the screen/monitor in front of you. Spend too much time looking away, and the timer will reset!
 
-<!-- <video src=""> -->
+<img width="1633" height="999" alt="image" src="https://github.com/user-attachments/assets/f6f684d5-3cc5-4730-a2d7-3b7bf26ac90d" />
 
 ---
 
