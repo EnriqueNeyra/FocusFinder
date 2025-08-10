@@ -16,7 +16,6 @@
 - [Pi Setup](#pi-setup)
 - [Assembly](#assembly)
 - [Using the FocusFinder](#using-the-frame)
-- [Video Demo](#video-demo)
 
 ---
 
