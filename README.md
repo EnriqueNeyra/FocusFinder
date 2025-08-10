@@ -31,6 +31,8 @@
 | Micro SD Card (for Pi OS image) | [Amazon](https://amzn.to/3Z0md5n) |
 | Enclosure 3D Print Files | [Printables](https://www.printables.com/model/1287334-eink-picture-frame) |
 
+<p align="center"><img src="https://github.com/user-attachments/assets/17d8eb2a-0daf-4b2d-9818-d128d05cf1a2" width="700"></p>
+
 ---
 
 ## Pi Setup
@@ -58,16 +60,30 @@ Be sure to **reboot** the Pi after the setup script completes.
 
 ## Assembly
 
-### 1. ...
-<!-- <p align="center"><img src="" width="700"></p> -->
+### 1. Attach the Pi Camera Module to the Pi Zero 2W
+<p align="center"><img src="https://github.com/user-attachments/assets/932353ec-4a00-4396-a531-db8d7ce37923" width="700"></p>
 
-### 2. ...
-<!-- <p align="center"><img src="" width="700"></p> -->
+### 2. Wire the OLED Display + Driver Board to the Appropriate Pi Pin Headers
+<p align="center"><img src="https://github.com/user-attachments/assets/b51d8fce-9536-4238-be88-17283b0e1948" width="700"></p>
 
-### 3. ...
-<!-- <p align="center"><img src="" width="700"></p> -->
+### 3. Insert the Pi Into the Base of the Enclosure
+<p align="center"><img src="https://github.com/user-attachments/assets/c7d38f4a-1e7d-4249-9dbf-10f76a347c93" width="700"></p>
 
-Assembly is now complete!
+### 4. Place the Driver Board into the Rear Slot and Tuck Wires
+<p align="center"><img src="https://github.com/user-attachments/assets/8d90bb13-36ea-4bee-9e2f-e6ddf2cadc6f" width="700"></p>
+
+### 5. Slot Display into Display/Camera Holder
+<p align="center"><img src="https://github.com/user-attachments/assets/dad7fada-553c-40b0-be0d-0e0b53b0061e" width="700"></p>
+
+### 6. Slot Camera into Display/Camera Holder
+<p align="center"><img src="https://github.com/user-attachments/assets/6631f0ee-7342-4e55-a98b-9eba4c7aa4fb" width="700"></p>
+
+### 7. Secure Display/Camera Holder to Base and Attach Enclosure Cover
+<p align="center"><img src="https://github.com/user-attachments/assets/4097dedf-6115-4c59-a6fe-8280504380c3" width="700"></p>
+<p align="center"><img src="https://github.com/user-attachments/assets/19f7288c-768e-4e1c-ac34-68a47e7dc2f9" width="700"></p>
+
+### Assembly is now complete!
+<p align="center"><img src="https://github.com/user-attachments/assets/f6f684d5-3cc5-4730-a2d7-3b7bf26ac90d" width="700"></p>
 
 ---
 
