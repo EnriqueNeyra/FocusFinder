@@ -24,7 +24,7 @@
 | Waveshare 1.54" Transparent OLED  | [Amazon](https://amzn.to/4jjJQNH) |
 | Pi Camera Module V2.1  | [Amazon](https://amzn.to/4keIu8i) |
 | Micro SD Card (for Pi OS image) | [Amazon](https://amzn.to/3Z0md5n) |
-| Enclosure 3D Print Files | [Printables](https://www.printables.com/model/1287334-eink-picture-frame) |
+| Enclosure 3D Print Files | [Printables](https://www.printables.com/model/1381066-focus-timer) |
 
 <p align="center"><img src="https://github.com/user-attachments/assets/17d8eb2a-0daf-4b2d-9818-d128d05cf1a2" width="700"></p>
 
