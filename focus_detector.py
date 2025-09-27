@@ -6,11 +6,11 @@ import time
 class FocusDetector:
     def __init__(self, cascade_path=None):
         if cascade_path is None:
-            cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_alt2.xml"
+            cascade_path = "./model_files/haarcascade_frontalface_alt2.xml"
         self.face_cascade = cv2.CascadeClassifier(cascade_path)
         
         # Optional: Load eye cascade for additional validation
-        self.eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_eye.xml")
+        self.eye_cascade = cv2.CascadeClassifier("./model_files/haarcascade_eye.xml")
 
     def is_face_frontal(self, face_roi, face_x, face_y):
         """Check if face is roughly frontal by detecting both eyes"""
@@ -29,9 +29,9 @@ class FocusDetector:
     def is_focused(self, frame_gray):
         faces = self.face_cascade.detectMultiScale(
             frame_gray, 
-            scaleFactor=1.07,
-            minNeighbors=6,
-            minSize=(60, 60),
+            scaleFactor=1.08,
+            minNeighbors=5,
+            minSize=(50, 50),
         )
         
         # Filter faces to only include frontal ones
