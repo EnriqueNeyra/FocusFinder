@@ -17,7 +17,7 @@ def main():
 
     while True:
         frame, gray = camera.get_frame()
-        focused, faces = detector.is_focused(gray)
+        focused, faces, eyes = detector.is_focused(gray)
         logging.info(f"Focused: {focused}, Faces detected: {len(faces)}")
         focus_state.set(focused)
         
@@ -30,10 +30,16 @@ def main():
             # Draw rectangles around detected faces
             for (x, y, w, h) in faces:
                 cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
+            
+            # Draw dots on detected eyes
+            for (ex, ey) in eyes:
+                cv2.circle(frame, (ex, ey), 5, (255, 0, 0), -1)  # Blue filled circles
+            
             cv2.putText(frame, status, (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
-            cv2.namedWindow("Focus Finder", cv2.WND_PROP_FULLSCREEN)
-            cv2.setWindowProperty("Focus Finder", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+            
+            cv2.namedWindow("Focus Finder", cv2.WINDOW_NORMAL)
             cv2.imshow("Focus Finder", frame)
+            
             if cv2.waitKey(1) == 27:  # ESC to quit
                 break
         
