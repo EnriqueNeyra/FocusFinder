@@ -37,8 +37,8 @@ def main():
             
             cv2.putText(frame, status, (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
             
-            cv2.namedWindow("Focus Finder", cv2.WINDOW_NORMAL)
-            cv2.resizeWindow("Focus Finder", 800, 480)
+            cv2.namedWindow("Focus Finder", cv2.WND_PROP_FULLSCREEN)
+            cv2.setWindowProperty("Focus Finder", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
             cv2.imshow("Focus Finder", frame)
             
             if cv2.waitKey(1) == 27:  # ESC to quit
