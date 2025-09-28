@@ -32,14 +32,26 @@ class EyeRenderer:
     def __init__(self, w: int, h: int, font: Optional[ImageFont.ImageFont] = None):
         self.w, self.h = w, h
 
+        # --- Determine timer text height to reserve space at bottom ---
+        self.font = font or ImageFont.load_default()
+        if hasattr(self.font, "getbbox"):
+            bbox = self.font.getbbox("00:00")
+            self.timer_h = (bbox[3] - bbox[1]) or getattr(self.font, "size", 12)
+        else:
+            self.timer_h = getattr(self.font, "size", 12)
+        self.timer_margin = 3  # pixels between eyes area and timer
+        self.bottom_reserve = self.timer_h + self.timer_margin
+
         # === Geometry: smaller & oval (emoji-like), with a touch more spacing ===
         self.eye_w = int(w * 0.28)    # narrower than before
         self.eye_h = int(h * 0.46)    # shorter -> oval
         self.eye_spacing = int(w * 0.12)
 
+        # Center eyes in the AVAILABLE area (exclude timer strip at bottom)
+        avail_h = max(1, h - self.bottom_reserve)
         self.cxL = w // 2 - self.eye_w // 2 - self.eye_spacing // 2
         self.cxR = w // 2 + self.eye_w // 2 + self.eye_spacing // 2
-        self.cy = h // 2 - 2
+        self.cy = (avail_h // 2) - 2  # nudge up slightly for aesthetics
 
         # Pupil sizing & limits within eye
         self.pupil_rx = max(2, int(self.eye_w * 0.10))
@@ -62,8 +74,6 @@ class EyeRenderer:
         self.sacc_end_t = 0.0
         self._dx = 0.0  # filtered offsets
         self._dy = 0.0
-
-        self.font = font  # timer font
 
     def _eye_rect(self, cx, cy):
         return (cx - self.eye_w // 2, cy - self.eye_h // 2,
@@ -191,9 +201,7 @@ class EyeRenderer:
                dt: float):
         draw = ImageDraw.Draw(canvas)
 
-        # Background: keep white for the full frame (consistent with prior look).
-        # If you want less lit area on transparent OLED, change this to fill=0 and
-        # only draw the eyes/text in white.
+        # Background: white full frame (consistent with prior look).
         draw.rectangle((0, 0, self.w, self.h), fill=1)
 
         # Update eyelids & motion
@@ -201,7 +209,7 @@ class EyeRenderer:
         dx_f, dy_f = self._update_autonomous_motion(mode, dt)
         dx, dy = int(round(dx_f)), int(round(dy_f))
 
-        # Draw eyes
+        # Draw eyes (already positioned above the reserved timer strip)
         self._draw_eye(draw, self.cxL, self.cy, (dx, dy),
                        angry=(mode == FocusMode.DISTRACTED),
                        skeptical=(mode == FocusMode.WARNING))
@@ -211,8 +219,7 @@ class EyeRenderer:
 
         # Timer text (hidden when blink_on=True)
         if timer_text and not timer_blink_on:
-            f = self.font or ImageFont.load_default()
-            # Robust text sizing across Pillow versions
+            f = self.font
             if hasattr(f, "getbbox"):
                 bbox = f.getbbox(timer_text)
                 tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
@@ -220,7 +227,7 @@ class EyeRenderer:
                 tw = draw.textlength(timer_text, font=f)
                 th = getattr(f, "size", 12)
             x = (self.w - int(tw)) // 2
-            y = self.h - int(th) - 2
+            y = self.h - int(th) - 1  # sit just above the bottom edge
             draw.text((x, y), timer_text, fill=0, font=f)
 
 
@@ -243,11 +250,11 @@ class EyeAnimator(threading.Thread):
         self.timer_blink_on = False
         self.running = False
 
-        # Try to use Waveshare font at 28px; fallback to default
+        # Timer font = 26 px as requested
         if timer_font is None:
             try:
                 font_path = os.path.join("./lib/waveshare_OLED", "Font.ttc")
-                self.timer_font = ImageFont.truetype(font_path, 28)
+                self.timer_font = ImageFont.truetype(font_path, 26)
             except Exception:
                 self.timer_font = ImageFont.load_default()
         else:
@@ -297,8 +304,7 @@ class EyeAnimator(threading.Thread):
                 pass
 
             elapsed = time.time() - t0
-            sleep = max(0.0, ft - elapsed)
-            time.sleep(sleep)
+            time.sleep(max(0.0, ft - elapsed))
 
     def stop(self):
         self.running = False
