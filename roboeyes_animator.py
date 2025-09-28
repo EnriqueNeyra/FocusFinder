@@ -2,41 +2,35 @@ import os
 import threading
 import time
 from typing import Optional
-from PIL import Image, ImageDraw, ImageFont
+from PIL import ImageDraw, ImageFont
 
-# Patch time.ticks_* for CPython
-import mp_time_shim  # noqa: F401
+import mp_time_shim  # patches time.ticks_* for the MicroPython lib
 
-# Import MicroPython RoboEyes (your uploaded file)
 from roboeyes import RoboEyes, DEFAULT, ANGRY
+from pil_framebuffer import PILFrameBuffer, RegionFrameBuffer
 
-from pil_framebuffer import PILFrameBuffer
 
 class FocusMode:
     FOCUSED = 1
-    WARNING = 2
+    WARNING = 2   # timer blinking (at-risk)
     DISTRACTED = 3
 
+
 class RoboEyeAnimator(threading.Thread):
-    """
-    Drop-in replacement for your EyeAnimator:
-      - set_state(focused, warning)
-      - set_timer(text, blink_on)
-      - pushes PIL frames via oled.display_image(img)
-    """
-    def __init__(self, oled_display, fps: int = 20,
+    def __init__(self, oled_display, fps: int = 30,
                  timer_font: Optional[ImageFont.ImageFont] = None,
-                 warn_font: Optional[ImageFont.ImageFont] = None):
+                 warn_font: Optional[ImageFont.ImageFont] = None,
+                 margin_x: int = 8, margin_top: int = 4, margin_between_halves: int = 2):
         super().__init__(daemon=True)
         self.oled = oled_display
-        self.fps = fps
+        self.fps = int(fps)
         self.mode = FocusMode.FOCUSED
         self.timer_text = ""
         self.timer_blink_on = False
         self.running = False
         self._lock = threading.Lock()
 
-        # Fonts (keep your existing size / placement feel)
+        # Fonts
         if timer_font is None:
             try:
                 font_path = os.path.join("./lib/waveshare_OLED", "Font.ttc")
@@ -47,15 +41,22 @@ class RoboEyeAnimator(threading.Thread):
             self.timer_font = timer_font
         self.warn_font = warn_font or self.timer_font
 
-        # Build a framebuffer RoboEyes can draw into
-        self.fb = PILFrameBuffer(self.oled.width, self.oled.height)
+        # Master framebuffer covering the whole display
+        self.master_fb = PILFrameBuffer(self.oled.width, self.oled.height)
 
-        # Callback: when RoboEyes has drawn a frame, we’ll optionally add text
+        # Constrain eyes to the TOP HALF (with horizontal margins)
+        half_h = self.oled.height // 2
+        eyes_w = self.oled.width - 2 * margin_x
+        eyes_h = half_h - margin_top - margin_between_halves
+        eyes_x = margin_x
+        eyes_y = margin_top
+        self.eyes_region = RegionFrameBuffer(self.master_fb, eyes_x, eyes_y, eyes_w, eyes_h)
+
+        # on_show draws timer then pushes to OLED
         def on_show(_ro):
-            # _ro.fb.image is our PIL Image (mode '1') with white BG and black eyes
-            img = _ro.fb.image
+            img = self.master_fb.image  # contains both eyes (in region) + timer text
 
-            # Draw timer / "DISTRACTED" AFTER eyes so it sits on top
+            # Draw timer in LOWER HALF, centered and fully visible
             txt = None
             fnt = self.timer_font
             if self.timer_blink_on:
@@ -66,33 +67,33 @@ class RoboEyeAnimator(threading.Thread):
 
             if txt:
                 d = ImageDraw.Draw(img)
-                # Measure and place near the bottom, slightly lower so it clears camera
                 if hasattr(d, "textbbox"):
                     tb = d.textbbox((0, 0), txt, font=fnt)
                     tw = tb[2] - tb[0]
                     th = tb[3] - tb[1]
                 else:
-                    tw = d.textlength(txt, font=fnt)
+                    tw = int(d.textlength(txt, font=fnt))
                     th = getattr(fnt, "size", 12)
 
-                x = (self.oled.width - int(tw)) // 2
-                # Nudge downward a touch to avoid your camera behind the colon
-                y = self.oled.height - th - 2
-                if y < 0: y = 0
-                d.text((x, y), txt, fill=0, font=fnt)  # 0=black on white
+                lower_y0 = half_h + margin_between_halves
+                # Place vertically so it’s centered in the lower half and never goes off-screen
+                y = lower_y0 + max(0, (self.oled.height - lower_y0 - th) // 2)
+                x = max(0, (self.oled.width - tw) // 2)
+                d.text((x, y), txt, fill=0, font=fnt)  # 0=black (visible)
 
-            # Push to OLED
+            # Push to OLED (PIL '1' image)
             self.oled.display_image(img)
 
-        # Create the RoboEyes engine
-        self.eyes = RoboEyes(self.fb, self.oled.width, self.oled.height,
-                             frame_rate=fps, on_show=on_show)
+        # Create RoboEyes that draws *inside* the top-half region
+        self.eyes = RoboEyes(self.eyes_region, self.eyes_region.width, self.eyes_region.height,
+                             frame_rate=self.fps, on_show=on_show)
 
-        # Gentle defaults (open eyes + idle roam + natural blink)
+        # Defaults
         self.eyes.set_auto_blinker(True, interval=2, variation=3)
         self.eyes.set_idle_mode(True, interval=1, variation=2)
+        self._apply_mood()  # ensure initial mood consistent
 
-    # External API (kept identical)
+    # External API expected by your app
     def set_state(self, focused: bool, warning: bool = False):
         with self._lock:
             if focused:
@@ -101,50 +102,61 @@ class RoboEyeAnimator(threading.Thread):
                 self.mode = FocusMode.WARNING
             else:
                 self.mode = FocusMode.DISTRACTED
-
-        # Map to RoboEyes moods/animations
-        if focused:
-            self.eyes.mood = DEFAULT
-            self.eyes.vert_flicker(False)
-            self.eyes.horiz_flicker(False)
-            self.eyes.set_idle_mode(True, interval=1, variation=2)
-        elif warning:
-            # At-risk: brows come down via "angry" eyelids and slight tremble
-            self.eyes.mood = ANGRY
-            self.eyes.vert_flicker(False)
-            self.eyes.horiz_flicker(True, amplitude=2)
-            self.eyes.set_idle_mode(True, interval=1, variation=2)
-        else:
-            # Fully distracted: stronger shake to feel urgent
-            self.eyes.mood = ANGRY
-            self.eyes.horiz_flicker(True, amplitude=4)
-            self.eyes.vert_flicker(False)
-            self.eyes.set_idle_mode(False)
+        self._apply_mood()
 
     def set_timer(self, text: str, blink_on: bool):
         with self._lock:
             self.timer_text = text or ""
             self.timer_blink_on = bool(blink_on)
+        # Mood rule: ANGRY eyelids only when timer is blinking (at-risk)
+        self._apply_mood()
+
+    # Mood/animation rules centralized here
+    def _apply_mood(self):
+        with self._lock:
+            focused = (self.mode == FocusMode.FOCUSED)
+            warning = (self.mode == FocusMode.WARNING)
+            distracted = (self.mode == FocusMode.DISTRACTED)
+
+            # Reset to calm baseline
+            self.eyes.mood = DEFAULT
+            self.eyes.vert_flicker(False)
+            self.eyes.horiz_flicker(False)
+
+            if focused:
+                self.eyes.set_idle_mode(True, interval=1, variation=2)
+            elif warning:
+                # Only here do we use ANGRY (eyelids) — when timer is blinking
+                if self.timer_blink_on:
+                    self.eyes.mood = ANGRY
+                self.eyes.set_idle_mode(True, interval=1, variation=2)
+                # Small shake to signal risk without being harsh
+                self.eyes.horiz_flicker(True, amplitude=2)
+            elif distracted:
+                # No angry lids here; make motion a bit more erratic but without eyelids
+                self.eyes.set_idle_mode(False)
+                self.eyes.horiz_flicker(True, amplitude=3)
 
     def run(self):
         self.running = True
-        ft = 1.0 / float(self.fps)
-        last = time.time()
-        # Start with eyes open
+        frame_dt = 1.0 / float(self.fps)
+        last = time.perf_counter()
         self.eyes.open()
         while self.running:
-            t0 = time.time()
-            _dt = t0 - last
-            last = t0
+            start = time.perf_counter()
 
-            # Advance RoboEyes animations and draw a frame
+            # Clear full frame to white each cycle (prevents ghosting across regions)
+            self.master_fb.fill(0)   # 0 here means "white" via our mapper
+
+            # Update + draw eyes (into top region) then on_show() adds timer + pushes
             self.eyes.update()
 
-            # Maintain ~fps schedule
-            elapsed = time.time() - t0
-            delay = ft - elapsed
-            if delay > 0:
-                time.sleep(delay)
+            # Simple framelimiter
+            elapsed = time.perf_counter() - start
+            sleep_for = frame_dt - elapsed
+            if sleep_for > 0:
+                time.sleep(sleep_for)
+            last = start
 
     def stop(self):
         self.running = False
