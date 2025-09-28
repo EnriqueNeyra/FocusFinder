@@ -7,7 +7,7 @@ from camera_interface import CameraInterface
 from focus_state import FocusState
 from focus_timer_thread import FocusTimerThread
 from oled_display import OLEDDisplay
-from animator import EyeAnimator   # NEW
+from roboeyes_animator import RoboEyeAnimator as EyeAnimator
 
 HEADLESS = os.environ.get("DISPLAY", "") == ""
 
