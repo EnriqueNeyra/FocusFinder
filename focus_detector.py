@@ -6,15 +6,18 @@ import time
 class FocusDetector:
     def __init__(self, cascade_path=None):
         if cascade_path is None:
-            cascade_path = "./model_files/haarcascade_frontalface_alt2.xml"
+            cascade_path = "./model_files/haarcascade_frontalface_alt.xml"
         self.face_cascade = cv2.CascadeClassifier(cascade_path)
         
         self.eye_cascade = cv2.CascadeClassifier("./model_files/haarcascade_eye.xml")
 
+        self.clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+
     def is_face_frontal(self, face_roi, face_x, face_y):
         """Check if face is roughly frontal by detecting both eyes"""
+        face_roi_eq = self.clahe.apply(face_roi)
         eyes = self.eye_cascade.detectMultiScale(
-            face_roi, 
+            face_roi_eq, 
             scaleFactor=1.15, 
             minNeighbors=4,
             )
@@ -26,7 +29,7 @@ class FocusDetector:
         
         for (ex, ey, ew, eh) in eyes:
             # Eyes should be in upper half of face
-            if ey < face_height * 0.5:
+            if ey < face_height * 0.6:
                 # Eyes shouldn't be too close to edges
                 eye_center_x = ex + ew//2
                 if 0.15 * face_width < eye_center_x < 0.85 * face_width:
@@ -43,8 +46,10 @@ class FocusDetector:
         return len(valid_eyes) >= 2, global_eyes
 
     def is_focused(self, frame_gray):
+
+        frame_gray_eq = self.clahe.apply(frame_gray)
         faces = self.face_cascade.detectMultiScale(
-            frame_gray, 
+            frame_gray_eq, 
             scaleFactor=1.08,
             minNeighbors=4,
             minSize=(40, 40),
