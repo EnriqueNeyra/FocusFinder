@@ -1,6 +1,11 @@
 from PIL import Image, ImageDraw
 
 class PILFrameBuffer:
+    """
+    1-bit framebuffer backed by Pillow.
+    Convention: draw with color=1 for foreground (eyes/ink), which we map to black.
+                color=0 is background, which we map to white.
+    """
     def __init__(self, width, height):
         self.width  = int(width)
         self.height = int(height)
@@ -8,7 +13,8 @@ class PILFrameBuffer:
         self.draw   = ImageDraw.Draw(self.image)
 
     def _c(self, v):
-        return 0 if v == 1 else 1  # 1=FG->black, 0=BG->white
+        # RoboEyes uses 0/1, where 1 means “ink”. Map 1->0 (black), 0->1 (white).
+        return 0 if v == 1 else 1
 
     def fill(self, color):
         self.draw.rectangle((0, 0, self.width, self.height), fill=self._c(color))
@@ -23,14 +29,13 @@ class PILFrameBuffer:
 
 class RegionFrameBuffer:
     """
-    A sub-framebuffer that draws into a rectangular region of a parent PILFrameBuffer.
-    All coords are local to (x0, y0, x0+width, y0+height).
+    Sub-framebuffer that draws into a rectangular region of a parent PILFrameBuffer.
+    All coordinates are local to this region.
     """
     def __init__(self, parent_fb: PILFrameBuffer, x0: int, y0: int, width: int, height: int):
         self.parent = parent_fb
         self.x0 = int(x0); self.y0 = int(y0)
         self.width = int(width); self.height = int(height)
-        # We draw straight onto the parent's image, but clamp to our region
         self.image = parent_fb.image
         self.draw = parent_fb.draw
 
@@ -47,8 +52,10 @@ class RegionFrameBuffer:
         return (x1, y1, x2, y2)
 
     def fill(self, color):
-        self.draw.rectangle((self.x0, self.y0, self.x0 + self.width - 1, self.y0 + self.height - 1),
-                            fill=self._c(color))
+        self.draw.rectangle(
+            (self.x0, self.y0, self.x0 + self.width - 1, self.y0 + self.height - 1),
+            fill=self._c(color)
+        )
 
     def pixel(self, x, y, color):
         X = self.x0 + int(x); Y = self.y0 + int(y)
