@@ -58,7 +58,7 @@ Be sure to **reboot** the Pi after the setup script completes.
 ### 1. Attach the Pi Camera Module to the Pi Zero 2W
 <p align="center"><img src="https://github.com/user-attachments/assets/932353ec-4a00-4396-a531-db8d7ce37923" width="700"></p>
 
-### 2. Wire the OLED Display + Driver Board to the Appropriate Pi Pin Headers
+### 2. Wire the OLED Display + Driver Board to the [Appropriate Pi Pin Headers](https://www.waveshare.com/wiki/1.51inch_Transparent_OLED#Hardware_connection)
 <p align="center"><img src="https://github.com/user-attachments/assets/b51d8fce-9536-4238-be88-17283b0e1948" width="700"></p>
 
 ### 3. Insert the Pi Into the Base of the Enclosure
