@@ -24,3 +24,19 @@ class OLEDDisplay:
         draw.text((x, y), f"{time_str}", font = self.font_cache[font_size], fill = 0)
         image = image.rotate(180)
         self.disp.ShowImage(self.disp.getbuffer(image))
+
+    # NEW: push a prepared PIL image ('1' or 'L') to the OLED
+    def display_image(self, image: Image.Image):
+        if image.mode != '1':
+            image = image.convert('1')
+        image = image.rotate(180)
+        self.disp.ShowImage(self.disp.getbuffer(image))
+
+    # NEW: let other modules query the panel size
+    @property
+    def width(self):
+        return self.disp.width
+
+    @property
+    def height(self):
+        return self.disp.height
