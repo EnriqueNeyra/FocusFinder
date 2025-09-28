@@ -5,7 +5,7 @@ import random
 import threading
 import time
 from enum import Enum, auto
-from typing import Optional
+from typing import Optional, Tuple
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -20,117 +20,173 @@ def clamp(v, lo, hi):
     return max(lo, min(hi, v))
 
 
+def lerp(a, b, t):
+    return a + (b - a) * t
+
+
 class EyeRenderer:
     """
-    Renders emoji-like eyes + optional timer onto a PIL '1' canvas.
-
-    Color convention for mono:
-      - White (1): sclera, background, text
-      - Black (0): pupils, eyelids, outlines
+    Emoji-like 👀 eyes + timer strip at the bottom.
+    - True blink: eye ellipse collapses vertically (outline closes).
+    - Pupils move smoothly within the eye ellipse interior.
+    - Eyebrows appear only when timer is blinking (at-risk).
+    Mono color convention:
+      - 1 (white): sclera, background, text
+      - 0 (black): pupils, eyelids/outline, eyebrows
     """
 
-    def __init__(self, w: int, h: int, font: Optional[ImageFont.ImageFont] = None, warn_font: Optional[ImageFont.ImageFont] = None):
+    def __init__(self, w: int, h: int,
+                 font: Optional[ImageFont.ImageFont] = None,
+                 warn_font: Optional[ImageFont.ImageFont] = None):
         self.w, self.h = w, h
 
-        # Fonts
+        # --- Fonts ---
         self.font = font or ImageFont.load_default()
         self.warn_font = warn_font or self.font
 
-        # --- Reserve a bottom strip tall enough for either "00:00" or "DISTRACTED" ---
-        def text_size(fnt, txt):
-            if hasattr(fnt, "getbbox"):
-                b = fnt.getbbox(txt)
-                return (b[2] - b[0], b[3] - b[1])
-            return (0, getattr(fnt, "size", 12))  # fallback height
+        # Use ascent/descent so text baseline never clips
+        def get_metrics(fnt) -> Tuple[int, int]:
+            try:
+                a, d = fnt.getmetrics()
+                return int(a), int(d)
+            except Exception:
+                size = getattr(fnt, "size", 12)
+                return int(size), 2
 
-        _, timer_h = text_size(self.font, "00:00")
-        _, warn_h = text_size(self.warn_font, "DISTRACTED")
-        self.timer_margin = 4             # gap between eyes area and timer strip
-        self.baseline_pad = 3             # pixels above bottom edge for baseline safety
-        self.bottom_reserve = max(timer_h, warn_h) + self.timer_margin + self.baseline_pad
+        a_timer, d_timer = get_metrics(self.font)
+        a_warn, d_warn = get_metrics(self.warn_font)
 
-        # === Eye geometry: emoji-oval with comfortable spacing ===
+        self.baseline_pad = 2
+        self.timer_margin = 4
+        self.text_block_h = max(a_timer + d_timer, a_warn + d_warn)
+        self.bottom_reserve = self.text_block_h + self.baseline_pad + self.timer_margin
+
+        # --- Eye geometry (emoji-oval) ---
         self.eye_w = int(w * 0.28)
         self.eye_h = int(h * 0.46)
         self.eye_spacing = int(w * 0.12)
 
-        # Place eyes in the AVAILABLE area (excluding the reserved bottom strip)
         avail_h = max(1, h - self.bottom_reserve)
         self.cxL = w // 2 - self.eye_w // 2 - self.eye_spacing // 2
         self.cxR = w // 2 + self.eye_w // 2 + self.eye_spacing // 2
-        # Slightly below the vertical center of the available area so they aren't too close to the top
-        self.cy = int(avail_h * 0.58)
+        self.cy = int(avail_h * 0.56)  # balanced vertical position
 
-        # Pupil size + travel limits
+        # Pupil size & travel limits
         self.pupil_rx = max(2, int(self.eye_w * 0.10))
         self.pupil_ry = max(2, int(self.eye_h * 0.14))
-        self.pupil_lim_x = int(self.eye_w * 0.25)
-        self.pupil_lim_y = int(self.eye_h * 0.20)
 
-        # Eyelids / blinking
-        self.lid_frac = 1.0
+        # Eyelid/blink state
+        self.lid_frac = 1.0     # 1=open .. 0=closed
         self.lid_target = 1.0
         self.next_blink_t = time.time() + random.uniform(2.5, 5.0)
         self.blinking = False
         self.blink_end_t = 0.0
 
-        # Autonomous motion (subtle)
-        self.t = 0.0
-        self.sdx = 0.0
-        self.sdy = 0.0
-        self.next_sacc_t = time.time() + random.uniform(2.0, 4.0)
-        self.sacc_end_t = 0.0
+        # Pupil motion: smooth target-chasing with LPF
         self._dx = 0.0
         self._dy = 0.0
+        self._tx = 0.0
+        self._ty = 0.0
+        self._t_next = time.time() + random.uniform(0.8, 1.6)
 
-    def _eye_rect(self, cx, cy):
-        return (cx - self.eye_w // 2, cy - self.eye_h // 2,
-                cx + self.eye_w // 2, cy + self.eye_h // 2)
+        # Small micro-saccades
+        self._sdx = 0.0
+        self._sdy = 0.0
+        self._sacc_end_t = 0.0
+        self._next_sacc_t = time.time() + random.uniform(2.0, 4.0)
 
-    def _draw_eye(self, draw: ImageDraw.ImageDraw, cx, cy, off, angry=False, skeptical=False):
-        x0, y0, x1, y1 = self._eye_rect(cx, cy)
+        # Phase accumulator
+        self.t = 0.0
 
-        # 3px(ish) outline for emoji look
-        for k in (-1, 0, 1):
+    # ----------------- helpers -----------------
+
+    def _eye_rect(self, cx, cy, a, b):
+        """Return bounding box of ellipse centered at (cx,cy) with radii (a,b)."""
+        return (int(cx - a), int(cy - b), int(cx + a), int(cy + b))
+
+    def _ellipse_contains(self, cx, cy, a, b, x, y, rx, ry):
+        """
+        Check if a pupil centered at (x,y) with radii (rx,ry) fits fully
+        inside the eye ellipse centered at (cx,cy) with radii (a,b).
+        """
+        # Effective available radii after accounting for pupil size
+        ax = max(1e-6, a - rx)
+        by = max(1e-6, b - ry)
+        nx = (x - cx) / ax
+        ny = (y - cy) / by
+        return (nx * nx + ny * ny) <= 1.0
+
+    def _clamp_to_ellipse(self, cx, cy, a, b, x, y, rx, ry):
+        """Clamp (x,y) so the pupil fits inside the ellipse."""
+        ax = max(1e-6, a - rx)
+        by = max(1e-6, b - ry)
+        nx = (x - cx) / ax
+        ny = (y - cy) / by
+        r2 = nx * nx + ny * ny
+        if r2 <= 1.0:
+            return x, y
+        k = 1.0 / math.sqrt(r2)
+        nx *= k
+        ny *= k
+        return cx + nx * ax, cy + ny * by
+
+    # ----------------- drawing -----------------
+
+    def _draw_ellipse_outline(self, draw, box, width=2):
+        """Thicker outline by overdraw (cheap, looks crisp on mono)."""
+        x0, y0, x1, y1 = box
+        for k in range(-width // 2, width // 2 + 1):
             draw.ellipse((x0 - k, y0 - k, x1 + k, y1 + k), outline=0, fill=None)
 
-        # Sclera
-        draw.ellipse((x0, y0, x1, y1), outline=0, fill=1)
+    def _draw_eye(self, draw: ImageDraw.ImageDraw, cx, cy, a, b,
+                  pupil_off: Tuple[float, float], angry=False, raised=False,
+                  lid_frac: float = 1.0):
+        """
+        Draw one eye:
+          - base ellipse (outline + sclera)
+          - pupil inside ellipse
+          - blink: ellipse vertically collapsed by lid_frac
+          - eyebrows when angry/raised
+        """
+        # --- Blink deformation: collapse vertical radius by lid_frac ---
+        b_now = max(1, int(round(b * lid_frac)))
+        # Outline closes because we draw a new ellipse at reduced height
+        box = self._eye_rect(cx, cy, a, b_now)
+        self._draw_ellipse_outline(draw, box, width=2)
+        draw.ellipse(box, outline=0, fill=1)  # sclera
 
-        # Pupil
-        px = clamp(cx + off[0], x0 + self.pupil_rx, x1 - self.pupil_rx)
-        py = clamp(cy + off[1], y0 + self.pupil_ry, y1 - self.pupil_ry)
-        draw.ellipse((px - self.pupil_rx, py - self.pupil_ry,
-                      px + self.pupil_rx, py + self.pupil_ry), fill=0)
+        # --- Pupil position (clamped to ellipse interior) ---
+        px = cx + pupil_off[0]
+        py = cy + pupil_off[1]
+        px, py = self._clamp_to_ellipse(cx, cy, a, b_now, px, py, self.pupil_rx, self.pupil_ry)
+        draw.ellipse((int(px - self.pupil_rx), int(py - self.pupil_ry),
+                      int(px + self.pupil_rx), int(py + self.pupil_ry)), fill=0)
 
-        # Eyelids (black to actually cover)
-        if self.lid_frac < 1.0:
-            open_h = int(self.eye_h * self.lid_frac)
-            lid_top = (self.eye_h - open_h) // 2
-            lid_bot = self.eye_h - open_h - lid_top
-            draw.rectangle((x0, y0, x1, y0 + lid_top), fill=0)      # top
-            draw.rectangle((x0, y1 - lid_bot, x1, y1), fill=0)      # bottom
+        # --- Eyebrows (only when at-risk) ---
+        if angry or raised:
+            # eyebrow baseline slightly above top of current ellipse
+            by = box[1] - 3
+            x0, y0, x1, y1 = box
+            mid = (x0 + x1) // 2
 
-        # Brows
-        if angry:
-            by = y0 - 2
-            draw.line((x0 + 2, by + 6, x0 + self.eye_w // 2, by), width=2, fill=0)
-            draw.line((x0 + self.eye_w // 2, by, x1 - 2, by + 6), width=2, fill=0)
-        elif skeptical:
-            byL = y0 + 4
-            byR = y0 - 2
-            if cx < self.w // 2:
-                draw.line((x0 + 2, byL, x1 - 2, byL), width=2, fill=0)
-            else:
-                draw.line((x0 + 2, byR, x1 - 2, byR), width=2, fill=0)
+            # "mad" (inward slant) on one eye, "raised/flat" on the other
+            if angry:
+                # inward slant
+                draw.line((x0 + 2, by + 6, mid, by), width=2, fill=0)
+                draw.line((mid, by, x1 - 2, by + 6), width=2, fill=0)
+            if raised:
+                # gentle raised/flat brow
+                draw.line((x0 + 2, by + 2, x1 - 2, by + 1), width=2, fill=0)
 
-    def _update_blink(self, mode):
+    # ----------------- animation states -----------------
+
+    def _update_blink(self, mode: FocusMode):
         t = time.time()
         if mode == FocusMode.FOCUSED:
             interval, dur = (2.5, 5.0), 0.18
         elif mode == FocusMode.WARNING:
             interval, dur = (1.8, 3.2), 0.22
-        else:  # DISTRACTED (note: angry is now tied to blink flag, not this mode directly)
+        else:
             interval, dur = (2.0, 3.0), 0.12
 
         if not self.blinking and t >= self.next_blink_t:
@@ -144,87 +200,98 @@ class EyeRenderer:
                 self.next_blink_t = time.time() + random.uniform(*interval)
                 self.lid_target = 1.0
             else:
+                # Close strongly near mid-blink
                 closeness = 1 - abs((frac * 2) - 1)  # 0->1->0
                 self.lid_target = clamp(1.0 - 0.95 * closeness, 0.05, 1.0)
 
-        # Ease lid toward target
+        # ease toward target
         k = 0.35
         self.lid_frac = (1 - k) * self.lid_frac + k * self.lid_target
 
-    def _update_autonomous_motion(self, mode: FocusMode, dt: float):
-        # Subtle movement
-        self.t += dt
-        lfo_x = math.sin(self.t * 0.7) * self.pupil_lim_x * 0.12
-        lfo_y = math.sin(self.t * 1.0) * self.pupil_lim_y * 0.10
-
+    def _update_pupil_targets(self, cx, cy, a, b, dt):
+        """
+        Smooth pupil motion:
+          - choose a random target inside ellipse every 0.8-1.6s
+          - low-pass filter toward the target (with optional micro-saccades)
+        """
         now = time.time()
-        if now >= self.next_sacc_t:
-            self.sdx = random.randint(-1, 1)
-            self.sdy = random.randint(-1, 1)
-            self.sacc_end_t = now + 0.05
-            self.next_sacc_t = now + random.uniform(2.0, 4.0)
-        elif now >= self.sacc_end_t:
-            self.sdx = 0.0
-            self.sdy = 0.0
+        self.t += dt
 
-        # Light shake for warning/distracted
-        if mode == FocusMode.FOCUSED:
-            shake_x = shake_y = 0.0
-            self.lid_target = max(self.lid_target, 0.95)
-        elif mode == FocusMode.WARNING:
-            amp = 0.6
-            shake_x = math.sin(self.t * 6.0) * amp
-            shake_y = math.cos(self.t * 6.0) * amp
-            self.lid_target = min(self.lid_target, 0.75)
-        else:
-            amp = 1.0  # toned down; "angry" now keyed by blink, not mode
-            shake_x = math.sin(self.t * 10.0) * amp
-            shake_y = math.cos(self.t * 10.0) * amp
-            self.lid_target = min(self.lid_target, 0.60)
+        # choose new target occasionally
+        if now >= self._t_next:
+            # pick a random point inside ellipse (with uniform-ish distribution)
+            theta = random.uniform(0, 2 * math.pi)
+            r = math.sqrt(random.uniform(0.0, 1.0))  # bias toward center
+            # Work in normalized ellipse coords then scale
+            tx = cx + (a - self.pupil_rx) * r * math.cos(theta) * 0.85
+            ty = cy + (b - self.pupil_ry) * r * math.sin(theta) * 0.85
+            self._tx, self._ty = tx - cx, ty - cy
+            self._t_next = now + random.uniform(0.8, 1.6)
 
-        target_x = lfo_x + self.sdx + shake_x
-        target_y = lfo_y + self.sdy + shake_y
+        # micro-saccades (tiny, brief)
+        if now >= self._next_sacc_t:
+            self._sdx = random.uniform(-0.6, 0.6)
+            self._sdy = random.uniform(-0.6, 0.6)
+            self._sacc_end_t = now + 0.05
+            self._next_sacc_t = now + random.uniform(2.0, 4.0)
+        elif now >= self._sacc_end_t:
+            self._sdx = 0.0
+            self._sdy = 0.0
 
-        # LPF for smoothness
-        alpha = 0.35
-        self._dx = (1.0 - alpha) * self._dx + alpha * target_x
-        self._dy = (1.0 - alpha) * self._dy + alpha * target_y
+        # base LFO wander (very subtle)
+        lfo_x = math.sin(self.t * 0.6) * (a - self.pupil_rx) * 0.06
+        lfo_y = math.sin(self.t * 0.9) * (b - self.pupil_ry) * 0.05
 
-        return self._dx, self._dy
+        # target + extras
+        target_x = self._tx + self._sdx + lfo_x
+        target_y = self._ty + self._sdy + lfo_y
+
+        # low-pass filter (smooth)
+        alpha = 0.25
+        self._dx = (1 - alpha) * self._dx + alpha * target_x
+        self._dy = (1 - alpha) * self._dy + alpha * target_y
+
+        # clamp to ellipse interior
+        px, py = self._clamp_to_ellipse(cx, cy, a, b, cx + self._dx, cy + self._dy,
+                                        self.pupil_rx, self.pupil_ry)
+        return px - cx, py - cy
+
+    # ----------------- frame render -----------------
 
     def render(self,
                mode: FocusMode,
                canvas: Image.Image,
                timer_text: Optional[str],
-               timer_blink_on: bool,
+               at_risk_blink_on: bool,
                dt: float):
         draw = ImageDraw.Draw(canvas)
 
-        # Full white background (consistent look). For darker background, set fill=0.
+        # Background full white (you can switch to 0 for mostly-off OLED)
         draw.rectangle((0, 0, self.w, self.h), fill=1)
 
-        # Updates
+        # Current eye radii (half width/height)
+        a = self.eye_w // 2
+        b = self.eye_h // 2
+
+        # Update eyelids and pupil offsets
         self._update_blink(mode)
-        dx_f, dy_f = self._update_autonomous_motion(mode, dt)
-        dx, dy = int(round(dx_f)), int(round(dy_f))
+        dxL, dyL = self._update_pupil_targets(self.cxL, self.cy, a, b, dt)
+        dxR, dyR = self._update_pupil_targets(self.cxR, self.cy, a, b, dt)
 
-        # Angry eyes ONLY when timer is blinking (user at-risk)
-        angry_now = bool(timer_blink_on)
-        skeptical_now = (mode == FocusMode.WARNING) and not angry_now
+        # Eyebrows only when timer is blinking (at-risk)
+        angry_now = bool(at_risk_blink_on)
+        # To get "mad + raised" together: left = mad (inward slant), right = raised
+        left_angry = angry_now
+        right_raised = angry_now
 
-        # Eyes (placed within available area above the timer strip)
-        self._draw_eye(draw, self.cxL, self.cy, (dx, dy),
-                       angry=angry_now,
-                       skeptical=skeptical_now)
-        self._draw_eye(draw, self.cxR, self.cy, (dx, dy),
-                       angry=angry_now,
-                       skeptical=skeptical_now)
+        # Draw eyes (blink deform via lid_frac)
+        self._draw_eye(draw, self.cxL, self.cy, a, b, (dxL, dyL),
+                       angry=left_angry, raised=False, lid_frac=self.lid_frac)
+        self._draw_eye(draw, self.cxR, self.cy, a, b, (dxR, dyR),
+                       angry=False, raised=right_raised, lid_frac=self.lid_frac)
 
-        # --- Timer / Warning strip at bottom ---
-        # Compute a safe baseline above bottom edge
-        # We'll center text horizontally in the full width
-        if timer_blink_on:
-            # Show "DISTRACTED" when timer is blinking off
+        # --- Bottom text: timer or "DISTRACTED" ---
+        if at_risk_blink_on:
             txt = "DISTRACTED"
             f = self.warn_font
         else:
@@ -232,22 +299,32 @@ class EyeRenderer:
             f = self.font
 
         if txt:
-            if hasattr(f, "getbbox"):
-                bbox = f.getbbox(txt)
-                tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+            # width via textbbox/textlength
+            if hasattr(draw, "textbbox"):
+                tb = draw.textbbox((0, 0), txt, font=f)
+                tw = tb[2] - tb[0]
             else:
                 tw = draw.textlength(txt, font=f)
-                th = getattr(f, "size", 12)
+
+            try:
+                ascent, descent = f.getmetrics()
+            except Exception:
+                ascent, descent = getattr(f, "size", 12), 2
 
             x = (self.w - int(tw)) // 2
-            y = self.h - int(th) - self.baseline_pad  # ensure not clipped
+            baseline_y = self.h - descent - self.baseline_pad
+            y = int(baseline_y - ascent)
+            if y < 0:
+                y = 0
             draw.text((x, y), txt, fill=0, font=f)
 
 
 class EyeAnimator(threading.Thread):
     """
-    Renders eyes + timer at ~N FPS on a separate thread.
-    Expectation: 'oled_display' exposes .width, .height, .display_image(PIL.Image).
+    Animator thread:
+      - Receives state + timer updates from FocusTimerThread.
+      - Renders at ~fps and pushes frames to the OLED via display_image(img).
+    Expectation: oled exposes .width, .height, .display_image(PIL.Image).
     """
 
     def __init__(self, oled_display, fps: int = 20,
@@ -261,7 +338,7 @@ class EyeAnimator(threading.Thread):
         self.timer_blink_on = False
         self.running = False
 
-        # Timer font at 26 px (as requested); warn font can be the same or bold if you have one.
+        # Fonts: 26px timer, same for warning unless provided
         if timer_font is None:
             try:
                 font_path = os.path.join("./lib/waveshare_OLED", "Font.ttc")
@@ -308,14 +385,12 @@ class EyeAnimator(threading.Thread):
                 timer_text = self.timer_text
                 blink_on = self.timer_blink_on
 
-            # Create frame (white background for now)
             img = Image.new('1', (self.oled.width, self.oled.height), 1)
-            EyeRenderer.render(self.eye, mode, img, timer_text, blink_on, dt)
+            self.eye.render(mode, img, timer_text, blink_on, dt)
 
             try:
                 self.oled.display_image(img)
             except Exception:
-                # Avoid crashing on transient I/O errors
                 pass
 
             elapsed = time.time() - t0
