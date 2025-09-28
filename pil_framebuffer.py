@@ -17,20 +17,27 @@ class PILFrameBuffer:
         return 0 if v == 1 else 1
 
     def fill(self, color):
-        self.draw.rectangle((0, 0, self.width, self.height), fill=self._c(color))
+        # Inclusive rectangle clear to prevent edge artifacts (top/left dots)
+        self.draw.rectangle((0, 0, self.width - 1, self.height - 1), fill=self._c(color))
 
     def pixel(self, x, y, color):
         self.draw.point((int(x), int(y)), fill=self._c(color))
 
     def fill_rect(self, x, y, w, h, color):
         x, y, w, h = int(x), int(y), int(w), int(h)
+        # Inclusive rect
         self.draw.rectangle((x, y, x + w - 1, y + h - 1), fill=self._c(color))
+
+    # --- new: safe snapshot for double-buffering ---
+    def snapshot(self):
+        return self.image.copy()
 
 
 class RegionFrameBuffer:
     """
     Sub-framebuffer that draws into a rectangular region of a parent PILFrameBuffer.
-    All coordinates are local to this region.
+    All coordinates are local to this region. Drawing is clipped so we never write
+    outside the region (avoids edge artifacts).
     """
     def __init__(self, parent_fb: PILFrameBuffer, x0: int, y0: int, width: int, height: int):
         self.parent = parent_fb
@@ -52,6 +59,7 @@ class RegionFrameBuffer:
         return (x1, y1, x2, y2)
 
     def fill(self, color):
+        # Inclusive fill of the region box
         self.draw.rectangle(
             (self.x0, self.y0, self.x0 + self.width - 1, self.y0 + self.height - 1),
             fill=self._c(color)
