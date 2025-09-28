@@ -56,7 +56,7 @@ class RoboEyeAnimator(threading.Thread):
         if timer_font is None:
             try:
                 font_path = os.path.join("./lib/waveshare_OLED", "Font.ttc")
-                self.timer_font = ImageFont.truetype(font_path, 22)
+                self.timer_font = ImageFont.truetype(font_path, 26)
             except Exception:
                 self.timer_font = ImageFont.load_default()
         else:
@@ -129,7 +129,7 @@ class RoboEyeAnimator(threading.Thread):
                     th = getattr(fnt, "size", 12)
 
                 # Place closer to top of lower half to avoid being too low
-                y = lower_y0 + 2  # just below the mid gap
+                y = lower_y0 + 0  # just below the mid gap
                 x = max(0, (W - tw) // 2)
                 d.text((x, y), txt, fill=0, font=fnt)  # black ink
 
