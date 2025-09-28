@@ -9,7 +9,6 @@ class FocusDetector:
             cascade_path = "./model_files/haarcascade_frontalface_alt2.xml"
         self.face_cascade = cv2.CascadeClassifier(cascade_path)
         
-        # Optional: Load eye cascade for additional validation
         self.eye_cascade = cv2.CascadeClassifier("./model_files/haarcascade_eye.xml")
 
     def is_face_frontal(self, face_roi, face_x, face_y):
@@ -17,8 +16,7 @@ class FocusDetector:
         eyes = self.eye_cascade.detectMultiScale(
             face_roi, 
             scaleFactor=1.15, 
-            minNeighbors=5,
-            minSize=(15, 15)
+            minNeighbors=4,
             )
         
         # Filter eyes based on position within face
@@ -48,8 +46,8 @@ class FocusDetector:
         faces = self.face_cascade.detectMultiScale(
             frame_gray, 
             scaleFactor=1.08,
-            minNeighbors=5,
-            minSize=(50, 50),
+            minNeighbors=4,
+            minSize=(40, 40),
         )
         
         # Filter faces to only include frontal ones
