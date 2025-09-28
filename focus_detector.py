@@ -27,9 +27,9 @@ class FocusDetector:
         face_width = face_roi.shape[1]
         face_height = face_roi.shape[0]
         
-        for (ex, ey, ew, eh) in eyes:
+        for (ex, ey, ew, eh) in eyes: 
             # Eyes should be in upper half of face
-            if ey < face_height * 0.6:
+            if ey < face_height * 0.55:
                 # Eyes shouldn't be too close to edges
                 eye_center_x = ex + ew//2
                 if 0.15 * face_width < eye_center_x < 0.85 * face_width:
