@@ -1,38 +1,58 @@
-import sys
+# oled_display.py
 import os
-import logging    
-import time
-import traceback
-from lib.waveshare_OLED import OLED_1in51
+import threading
+import logging
 from PIL import Image, ImageDraw, ImageFont
+from lib.waveshare_OLED import OLED_1in51
 
 logging.basicConfig(level=logging.DEBUG)
 
-class OLEDDisplay:
 
+class OLEDDisplay:
     def __init__(self):
         self.disp = OLED_1in51.OLED_1in51()
         self.disp.Init()
-        self.font_cache = {
-            32: ImageFont.truetype(os.path.join('./lib/waveshare_OLED', 'Font.ttc'), 32),
-            22: ImageFont.truetype(os.path.join('./lib/waveshare_OLED', 'Font.ttc'), 22),
-            }
 
-    def display_status(self, time_str, x, y, font_size):
+        # Lock ensures only one thread writes to OLED at a time
+        self._io_lock = threading.Lock()
+
+        # Cache common fonts once (so we don’t reload every frame)
+        font_path = os.path.join('./lib/waveshare_OLED', 'Font.ttc')
+        self.font_cache = {}
+        for size in (14, 22, 25, 32):
+            try:
+                self.font_cache[size] = ImageFont.truetype(font_path, size)
+            except Exception:
+                self.font_cache[size] = ImageFont.load_default()
+
+    def display_status(self, time_str, x, y, font_size=22):
+        """
+        Draw a quick status string (usually the timer) at coordinates.
+        """
         image = Image.new('1', (self.disp.width, self.disp.height), "WHITE")
         draw = ImageDraw.Draw(image)
-        draw.text((x, y), f"{time_str}", font = self.font_cache[font_size], fill = 0)
+        font = self.font_cache.get(font_size, ImageFont.load_default())
+        draw.text((x, y), f"{time_str}", font=font, fill=0)
         image = image.rotate(180)
-        self.disp.ShowImage(self.disp.getbuffer(image))
 
-    # NEW: push a prepared PIL image ('1' or 'L') to the OLED
+        with self._io_lock:  # serialize SPI transfers
+            self.disp.ShowImage(self.disp.getbuffer(image))
+
     def display_image(self, image: Image.Image):
+        """
+        Push a prepared PIL image to the OLED.
+        Makes a copy so the source can keep being modified without tearing.
+        """
         if image.mode != '1':
-            image = image.convert('1')
-        image = image.rotate(180)
-        self.disp.ShowImage(self.disp.getbuffer(image))
+            img = image.convert('1').copy()
+        else:
+            img = image.copy()
 
-    # NEW: let other modules query the panel size
+        img = img.rotate(180)
+
+        with self._io_lock:
+            self.disp.ShowImage(self.disp.getbuffer(img))
+
     @property
     def width(self):
         return self.disp.width
