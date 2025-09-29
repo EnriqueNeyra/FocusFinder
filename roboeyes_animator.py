@@ -121,6 +121,9 @@ class RoboEyeAnimator(threading.Thread):
             elif self.timer_text:
                 txt = self.timer_text
 
+            if txt and not self.timer_blink_on and ":" in txt:
+                txt = txt.replace(":", "\u2009:\u2009")  # THIN SPACE around the colo
+
             if txt:
                 if hasattr(d, "textbbox"):
                     tb = d.textbbox((0, 0), txt, font=fnt)
@@ -130,7 +133,7 @@ class RoboEyeAnimator(threading.Thread):
                     tw = int(d.textlength(txt, font=fnt))
                     th = getattr(fnt, "size", 12)
                 # Place high in the lower half
-                y = lower_y0 + 2  # top of lower half
+                y = lower_y0 + 4  # top of lower half
                 x = max(0, (W - tw) // 2)
                 d.text((x, y), txt, fill=0, font=fnt)
 
