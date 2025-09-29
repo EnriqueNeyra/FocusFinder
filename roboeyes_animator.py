@@ -1,3 +1,4 @@
+# roboeyes_animator.py
 import os
 import threading
 import time
@@ -7,36 +8,37 @@ from PIL import ImageDraw, ImageFont
 
 import mp_time_shim  # patches time.ticks_* for the MicroPython-style timing
 
-# Import moods + directions so we can occasionally nudge to right-edge positions
 from roboeyes import RoboEyes, DEFAULT, ANGRY, HAPPY, TIRED, E, NE, SE
 from pil_framebuffer import PILFrameBuffer, RegionFrameBuffer
 
 
 class FocusMode:
     FOCUSED = 1        # counting up (non-zero)
-    WARNING = 2        # grace period / at-risk (your app sets this)
+    WARNING = 2        # grace/at-risk period (your app sets this)
     DISTRACTED = 3     # idle at 00:00 (not focused)
 
 
 class RoboEyeAnimator(threading.Thread):
     """
-    128x64 transparent OLED:
-      - Eyes constrained to TOP HALF (slightly lower than before), smaller spacing, more-rounded corners.
-      - Timer font 25, placed higher in the lower half.
-      - Startup: HAPPY + subtle vertical flicker (~2.5s), no SAD.
-      - Blinks less frequent.
-      - Random 3s HAPPY bursts while focused.
-      - Grace period preserved: 'DISTRACTED'/ANGRY only when blink_on=True.
-      - Mood is reasserted each frame so blinks never revert to DEFAULT.
-      - Occasional right-edge nudges so eyes visibly use the whole right side.
+    128x64 transparent OLED eyes + timer.
+
+    Changes in this version:
+      - Eyes use the full TOP HALF above the timer (tiny top margin; gap to midline = 0).
+      - Less rounded eyes (corner radius = 5).
+      - WARNING state: ANGRY mood PERSISTS for the entire WARNING duration (not tied to blink_on),
+        with intermittent short horizontal flickers.
+      - FOCUSED: HAPPY bursts last ~3s, trigger a bit more often than before (but not too spammy).
+      - Blinks less frequent overall (≈ every 6–14s).
+      - Occasional right-edge nudges to visibly reach the far right.
+      - Startup shows HAPPY + subtle vertical flicker for ~2.5 s (no SAD at boot).
     """
     def __init__(self, oled_display, fps: int = 30,
                  timer_font: Optional[ImageFont.ImageFont] = None,
                  warn_font: Optional[ImageFont.ImageFont] = None,
-                 # Layout knobs tuned for 128x64:
-                 margin_x: int = 2,         # minimal margins -> more right-edge reach
-                 margin_top: int = 6,       # slightly lower than before
-                 gap_mid: int = 1):         # tiny gap between halves
+                 # Layout knobs for 128x64:
+                 margin_x: int = 1,         # minimal margins -> maximize horizontal roam
+                 margin_top: int = 2,       # tiny top inset so eyes can use nearly all vertical space
+                 gap_mid: int = 0):         # no gap to the midline; eyes fill the entire top half
         super().__init__(daemon=True)
         self.oled = oled_display
         self.fps = int(fps)
@@ -49,14 +51,14 @@ class RoboEyeAnimator(threading.Thread):
 
         # Timed behaviors
         now = time.perf_counter()
-        self._startup_until = now + 2.5     # HAPPY + slight v-flicker at boot
-        self._seen_first_timer = False      # don't trigger SAD on first "00:00"
+        self._startup_until = now + 2.5     # HAPPY + slight vertical flicker at boot
+        self._seen_first_timer = False      # don't trigger SAD on the very first 00:00
         self._happy_until = 0.0
-        self._next_happy_check = now + random.uniform(2.5, 4.0)  # first check soon
+        self._next_happy_check = now + random.uniform(2.0, 3.5)  # check a bit more often
         self._sad_until = 0.0
         self._warning_shake_on_until = 0.0
         self._next_warning_burst = now + 0.9
-        self._next_edge_bias_check = now + random.uniform(5.0, 8.0)  # occasional extreme-right nudges
+        self._next_edge_bias_check = now + random.uniform(6.0, 10.0)  # occasional right-edge nudge
 
         # Fonts
         if timer_font is None:
@@ -81,18 +83,20 @@ class RoboEyeAnimator(threading.Thread):
         W, H = self.oled.width, self.oled.height  # 128x64 expected
         self.master_fb = PILFrameBuffer(W, H)
 
-        # --- Top-half region for eyes (slightly lower; nearly full width) ---
+        # --- Eyes region: fill the entire top half (max vertical space above timer) ---
         half_h = H // 2
         eyes_x = margin_x
         eyes_y = margin_top
         eyes_w = W - 2 * margin_x
-        eyes_h = half_h - eyes_y - gap_mid
-        # Minimums to avoid negative ranges in RoboEyes
-        MIN_EYE_W, MIN_EYE_H, MIN_SPACE = 20, 16, 6
+        eyes_h = half_h - eyes_y - gap_mid  # gap_mid=0 => reaches the midline
+
+        # Minimums to avoid negative ranges inside RoboEyes
+        MIN_EYE_W, MIN_EYE_H, MIN_SPACE = 20, 16, 4
         MIN_REGION_W = 2 * MIN_EYE_W + MIN_SPACE + 2
         MIN_REGION_H = max(MIN_EYE_H + 4, 24)
         eyes_w = max(eyes_w, MIN_REGION_W)
         eyes_h = max(eyes_h, MIN_REGION_H)
+
         # Clamp inside top half
         if eyes_x + eyes_w > W:
             eyes_w = W - eyes_x
@@ -107,10 +111,10 @@ class RoboEyeAnimator(threading.Thread):
             d = ImageDraw.Draw(img)
 
             # Clear lower half (inclusive) each frame
-            lower_y0 = half_h + gap_mid
+            lower_y0 = half_h  # gap_mid=0
             d.rectangle((0, lower_y0, W - 1, H - 1), fill=1)  # white
 
-            # "DISTRACTED" ONLY when blinking is active -> preserves grace period
+            # Show 'DISTRACTED' ONLY when blinking is active; mood is handled elsewhere
             txt = None
             fnt = self.timer_font
             if self.timer_blink_on:
@@ -127,8 +131,8 @@ class RoboEyeAnimator(threading.Thread):
                 else:
                     tw = int(d.textlength(txt, font=fnt))
                     th = getattr(fnt, "size", 12)
-                # Place high in the lower half (slightly higher per your request)
-                y = lower_y0  # top line of lower half
+                # Place high in the lower half
+                y = lower_y0  # top of lower half
                 x = max(0, (W - tw) // 2)
                 d.text((x, y), txt, fill=0, font=fnt)
 
@@ -147,14 +151,14 @@ class RoboEyeAnimator(threading.Thread):
         self.eyes = RoboEyes(self.eyes_region, self.eyes_region.width, self.eyes_region.height,
                              frame_rate=self.fps, on_show=on_show)
 
-        # --- Eye geometry: a touch smaller, more rounded, smaller spacing ---
-        EYE_W, EYE_H, EYE_R, EYE_SPACE = 20, 18, 8, 6  # more rounded corners (R=8), SPACE=6
+        # --- Eye geometry: slightly smaller spacing, less rounded corners ---
+        EYE_W, EYE_H, EYE_R, EYE_SPACE = 20, 18, 5, 4  # R=5 (less rounded), SPACE=4
         total_min_w = 2 * EYE_W + EYE_SPACE
         if self.eyes_region.width < total_min_w:
             scale = self.eyes_region.width / float(total_min_w)
             EYE_W = max(16, int(EYE_W * scale))
             EYE_H = max(14, int(EYE_H * scale))
-            EYE_SPACE = max(6, int(EYE_SPACE * scale))
+            EYE_SPACE = max(4, int(EYE_SPACE * scale))
 
         self.eyes.eyes_width(EYE_W, EYE_W)
         self.eyes.eyes_height(EYE_H, EYE_H)
@@ -162,8 +166,8 @@ class RoboEyeAnimator(threading.Thread):
         self.eyes.eyes_spacing(EYE_SPACE)
 
         # Behaviors
-        # Blinks less often overall (5–12 s)
-        self.eyes.set_auto_blinker(True, interval=5, variation=7)
+        # Blinks less often overall (~6–14 s)
+        self.eyes.set_auto_blinker(True, interval=6, variation=8)
         self.eyes.set_idle_mode(True, interval=1, variation=2)
 
         self._apply_mood(initial=True)
@@ -177,7 +181,6 @@ class RoboEyeAnimator(threading.Thread):
                 self.mode = FocusMode.WARNING
             else:
                 self.mode = FocusMode.DISTRACTED
-        # Re-assert mood immediately
         self._apply_mood()
 
     def set_timer(self, text: str, blink_on: bool):
@@ -198,7 +201,7 @@ class RoboEyeAnimator(threading.Thread):
 
         self._apply_mood()
 
-    # --- Mood / animation logic (called on state/timer changes AND each frame) ---
+    # --- Mood / animation logic ---
     def _apply_mood(self, initial: bool = False):
         with self._lock:
             now = time.perf_counter()
@@ -206,15 +209,16 @@ class RoboEyeAnimator(threading.Thread):
             warning = (self.mode == FocusMode.WARNING)
             distracted = (self.mode == FocusMode.DISTRACTED)
 
-            # Start with whatever we currently have to avoid stomping moods on blink
+            # Start with current mood so blinks don't snap back to DEFAULT
             desired_mood = self.eyes.mood
 
-            # Startup: force HAPPY + light vertical flicker for ~2.5s
+            # Startup: HAPPY + light vertical flicker for ~2.5s
             if now < self._startup_until:
                 desired_mood = HAPPY
                 self.eyes.vert_flicker(True, amplitude=1)
                 self.eyes.horiz_flicker(False)
                 self.eyes.set_idle_mode(True, interval=1, variation=2)
+
             else:
                 # Stop startup flicker if it was on
                 self.eyes.vert_flicker(False)
@@ -222,44 +226,38 @@ class RoboEyeAnimator(threading.Thread):
                 if focused:
                     # Idle roam
                     self.eyes.set_idle_mode(True, interval=1, variation=2)
-                    # Random HAPPY bursts ~3s, less often (3–6s checks, 30% chance)
+                    # Random HAPPY bursts lasting ~3s.
+                    # Check every 2.0–3.5s; ~45% chance to start a burst if none active.
                     if now >= self._next_happy_check and now >= self._happy_until:
-                        if random.random() < 0.30:
+                        if random.random() < 0.45:
                             self._happy_until = now + 3.0
-                        self._next_happy_check = now + random.uniform(3.0, 6.0)
-                    if now < self._happy_until:
-                        desired_mood = HAPPY
-                    else:
-                        desired_mood = DEFAULT
+                        self._next_happy_check = now + random.uniform(2.0, 3.5)
+                    desired_mood = HAPPY if now < self._happy_until else DEFAULT
 
                 elif warning:
-                    # Grace period: calm unless timer is actually blinking
+                    # ANGRY PERSISTS for entire WARNING window (independent of blink_on).
+                    # (Blink_on only affects whether 'DISTRACTED' text is rendered.)
+                    desired_mood = ANGRY
                     self.eyes.set_idle_mode(True, interval=1, variation=2)
-                    if self.timer_blink_on:
-                        desired_mood = ANGRY
-                        # Intermittent short shake during blink period only
-                        if now >= self._next_warning_burst:
-                            self._warning_shake_on_until = now + 0.12
-                            self._next_warning_burst = now + 0.8 + random.uniform(0.0, 0.4)
-                        self.eyes.horiz_flicker(now < self._warning_shake_on_until, amplitude=2)
-                    else:
-                        self.eyes.horiz_flicker(False)
-                        desired_mood = DEFAULT
+                    # Intermittent short shake bursts while in WARNING
+                    if now >= self._next_warning_burst:
+                        self._warning_shake_on_until = now + 0.12
+                        self._next_warning_burst = now + 0.8 + random.uniform(0.0, 0.4)
+                    self.eyes.horiz_flicker(now < self._warning_shake_on_until, amplitude=2)
 
                 elif distracted:
                     # Calm idle
                     self.eyes.set_idle_mode(True, interval=1, variation=2)
                     desired_mood = DEFAULT
 
-                # Temporary SAD (TIRED) overlay if active
+                # Temporary SAD overlay if active
                 if now < self._sad_until:
                     desired_mood = TIRED
 
-                # Occasional nudge toward right edge so the eyes visibly use all space
+                # Occasional nudge to right-edge so eyes visibly use the full right side
                 if now >= self._next_edge_bias_check and not warning:
-                    # Pick one of the right-side targets
                     self.eyes.set_position(random.choice([E, NE, SE]))
-                    self._next_edge_bias_check = now + random.uniform(6.0, 10.0)
+                    self._next_edge_bias_check = now + random.uniform(8.0, 12.0)
 
             # Only change if different to avoid unnecessary toggling
             if self.eyes.mood != desired_mood:
@@ -274,17 +272,17 @@ class RoboEyeAnimator(threading.Thread):
         while self.running:
             start = time.perf_counter()
 
-            # Clear full frame + eyes region to prevent afterimages
+            # Full clear prevents afterimages/edge artifacts
             self.master_fb.fill(0)      # 0 => white via mapper
             self.eyes_region.fill(0)
 
-            # Re-assert mood each frame so blinks do NOT revert it
+            # Re-assert mood each frame so blinks never revert it
             self._apply_mood()
 
             # Draw eyes; on_show overlays timer and pushes once
             self.eyes.update()
 
-            # Simple frame limiter
+            # Frame limiter
             elapsed = time.perf_counter() - start
             sleep_for = frame_dt - elapsed
             if sleep_for > 0:
