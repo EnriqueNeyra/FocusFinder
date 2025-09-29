@@ -10,7 +10,10 @@
 #
 # GNU General Public License  <https://www.gnu.org/licenses/>.
 #
-from micropython import const 
+try:
+	from micropython import const  # MicroPython
+except Exception:
+	def const(x): return x
 from fbutil import FBUtil
 from random import randint
 import time
