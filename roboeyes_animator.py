@@ -218,7 +218,7 @@ class RoboEyeAnimator(threading.Thread):
             distracted = (self.mode == FocusMode.DISTRACTED)
 
             # Start with current mood so blinks don't snap back to DEFAULT
-            current = self.eyes.get_mood()
+            # current = self.eyes.get_mood()
 
             # Boot: brief HAPPY flicker regardless of state
             if initial:
