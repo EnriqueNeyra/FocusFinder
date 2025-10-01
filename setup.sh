@@ -21,10 +21,23 @@ sudo apt install -y \
   python3-numpy \
   python3-smbus \
   python3-picamera2 \
-
+  python3-libcamera \
+  libcamera-apps \
+  
 # 2. Enable SPI
 echo "Enabling SPI..."
 sudo raspi-config nonint do_spi 0
+
+# 3. Ensure IMX219 camera overlay in config.txt
+CFG="/boot/firmware/config.txt"
+if ! grep -q "^\[all\]" "$CFG"; then
+  echo "Adding [all] section to $CFG..."
+  echo "[all]" | sudo tee -a "$CFG" >/dev/null
+fi
+if ! grep -q "^dtoverlay=imx219" "$CFG"; then
+  echo "Adding dtoverlay=imx219 to $CFG..."
+  echo "dtoverlay=imx219" | sudo tee -a "$CFG" >/dev/null
+fi
 
 # 4. Create systemd service
 SERVICE_PATH="/etc/systemd/system/focus-finder.service"
