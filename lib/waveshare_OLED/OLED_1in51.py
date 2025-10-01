@@ -122,6 +122,7 @@ class OLED_1in51(config.RaspberryPi):
         return buf
             
     def ShowImage(self, pBuf):
+        # Batch write optimization for better performance
         for page in range(0,8):
             # set page address #
             self.command(0xB0 + page)
@@ -129,14 +130,16 @@ class OLED_1in51(config.RaspberryPi):
             self.command(0x00); 
             # set high column address #
             self.command(0x10); 
-            # write data #
-            time.sleep(0.01)
+            # write data # - REMOVED DELAY FOR PERFORMANCE
             if(self.Device == Device_SPI):
                 self.digital_write(self.DC_PIN,True)
-            for i in range(0,self.width):
-                if(self.Device == Device_SPI):
-                    self.spi_writebyte([~pBuf[i+self.width*page]]); 
-                else :
+                # Batch write for better SPI performance
+                page_data = []
+                for i in range(0,self.width):
+                    page_data.append(~pBuf[i+self.width*page])
+                self.spi.writebytes(page_data)
+            else :
+                for i in range(0,self.width):
                     self.i2c_writebyte(0x40, ~pBuf[i+self.width*page])
                        
     def clear(self):

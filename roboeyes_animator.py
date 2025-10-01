@@ -47,13 +47,12 @@ class RoboEyeAnimator(threading.Thread):
         self.running = False
         self._lock = threading.Lock()
         
-        # Performance optimizations
-        self._frame_buffer = None  # Double buffer for screen tearing prevention
-        self._last_timer_text = ""
-        self._last_timer_blink = False
+        # Performance optimizations - simplified and more efficient
         self._display_dirty = True
-        self._frame_skip_counter = 0
-        self._skip_frames = max(1, fps // 15)  # Skip frames on slower hardware
+        self._last_timer_state = None  # Track timer changes more efficiently
+        self._last_mood_state = None   # Track mood changes more efficiently
+        self._frame_count = 0
+        self._last_display_time = 0
 
         # Timed behaviors
         now = time.perf_counter()
@@ -111,26 +110,20 @@ class RoboEyeAnimator(threading.Thread):
 
         self.eyes_region = RegionFrameBuffer(self.master_fb, eyes_x, eyes_y, eyes_w, eyes_h)
 
-        # --- on_show: optimized callback with double buffering ---
+        # --- on_show: optimized callback with minimal allocations ---
         def on_show(_ro):
-            # Only update display if something changed
-            if not self._display_dirty:
-                return
+            # Rate limit display updates to prevent overwhelming the Pi Zero 2W
+            current_time = time.perf_counter()
+            min_frame_time = 1.0 / self.fps
             
-            # Skip frames to maintain performance on Pi Zero 2W
-            self._frame_skip_counter += 1
-            if self._frame_skip_counter < self._skip_frames:
-                return
-            self._frame_skip_counter = 0
+            if current_time - self._last_display_time < min_frame_time:
+                return  # Skip this frame to maintain target FPS
             
-            # Use double buffering to prevent screen tearing
-            if self._frame_buffer is None:
-                self._frame_buffer = self.master_fb.image.copy()
-            else:
-                # Reuse buffer instead of creating new image
-                self._frame_buffer.paste(self.master_fb.image)
+            self._last_display_time = current_time
             
-            d = ImageDraw.Draw(self._frame_buffer)
+            # Work directly with master framebuffer to avoid copies
+            img = self.master_fb.image
+            d = ImageDraw.Draw(img)
 
             lower_y0 = half_h
             d.rectangle((0, lower_y0, W - 1, H - 1), fill=1)
@@ -164,9 +157,8 @@ class RoboEyeAnimator(threading.Thread):
                 d.ellipse((ex - r, ey - r, ex + r, ey + r), fill=0)
                 d.polygon([(ex, ey - r - 2), (ex - 2, ey - 1), (ex + 2, ey - 1)], fill=0)
 
-            # Send the double-buffered image to display
-            self.oled.display_image(self._frame_buffer)
-            self._display_dirty = False
+            # Send image directly to display (no double buffering needed with rate limiting)
+            self.oled.display_image(img)
 
         self.eyes = RoboEyes(self.eyes_region, self.eyes_region.width, self.eyes_region.height,
                              frame_rate=self.fps, on_show=on_show)
@@ -206,15 +198,14 @@ class RoboEyeAnimator(threading.Thread):
             text = text or ""
             blink_on = bool(blink_on)
             
-            # Only update if something actually changed
-            if text == self._last_timer_text and blink_on == self._last_timer_blink:
-                return
+            # Create state tuple for efficient comparison
+            current_state = (text, blink_on)
+            if current_state == self._last_timer_state:
+                return  # No change, skip update
                 
+            self._last_timer_state = current_state
             self.prev_timer_text = prev
             self.timer_text = text
-            self._last_timer_text = text
-            self._last_timer_blink = blink_on
-            self._display_dirty = True  # Mark for redraw
 
             # Detect start/stop of blinking for angry persistence
             if blink_on and not self.timer_blink_on:
@@ -241,6 +232,14 @@ class RoboEyeAnimator(threading.Thread):
             warning = (self.mode == FocusMode.WARNING)
             distracted = (self.mode == FocusMode.DISTRACTED)
 
+            # Create state tuple for efficient comparison
+            current_mood_state = (focused, warning, distracted, self._angry_active, 
+                                now < self._startup_until, now < self._happy_until, now < self._sad_until)
+            
+            if not initial and current_mood_state == self._last_mood_state:
+                return  # No mood change, skip expensive operations
+            
+            self._last_mood_state = current_mood_state
             desired_mood = self.eyes.mood
 
             if now < self._startup_until:
@@ -281,7 +280,6 @@ class RoboEyeAnimator(threading.Thread):
 
             if self.eyes.mood != desired_mood:
                 self.eyes.mood = desired_mood
-                self._display_dirty = True  # Mark for redraw when mood changes
 
     # --- Thread loop ---
     def run(self):
@@ -289,29 +287,27 @@ class RoboEyeAnimator(threading.Thread):
         frame_dt = 1.0 / float(self.fps)
         self.eyes.open()
         
-        # Initialize frame buffer
-        self._frame_buffer = self.master_fb.image.copy()
-        
+        # Initialize timing
+        self._last_display_time = time.perf_counter()
+        mood_update_interval = 0.05  # Update mood 20 times per second max
         last_mood_time = 0
-        mood_update_interval = 0.1  # Update mood 10 times per second max
 
         while self.running:
             frame_start = time.perf_counter()
             
-            # Clear buffers only when needed
+            # Clear buffers - only when we actually need to update
             self.master_fb.fill(0)
             self.eyes_region.fill(0)
 
             # Update mood less frequently to reduce CPU load
-            now = time.perf_counter()
-            if now - last_mood_time >= mood_update_interval:
+            if frame_start - last_mood_time >= mood_update_interval:
                 self._apply_mood()
-                last_mood_time = now
-                self._display_dirty = True
+                last_mood_time = frame_start
             
+            # Update eyes animation
             self.eyes.update()
 
-            # More precise frame timing
+            # Precise frame timing with minimal sleep overhead
             frame_time = time.perf_counter() - frame_start
             sleep_time = frame_dt - frame_time
             if sleep_time > 0.001:  # Only sleep if significant time left

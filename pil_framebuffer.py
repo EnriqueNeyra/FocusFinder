@@ -17,8 +17,15 @@ class PILFrameBuffer:
         return 0 if v == 1 else 1
 
     def fill(self, color):
-        # Inclusive rectangle clear to prevent edge artifacts (top/left dots)
-        self.draw.rectangle((0, 0, self.width - 1, self.height - 1), fill=self._c(color))
+        # Use more efficient fill method
+        fill_color = self._c(color)
+        if hasattr(self.image, 'paste'):
+            # Create a small 1x1 image and paste it over the whole area (faster than rectangle)
+            fill_img = Image.new("1", (1, 1), fill_color)
+            self.image.paste(fill_img, (0, 0, self.width, self.height))
+        else:
+            # Fallback to rectangle
+            self.draw.rectangle((0, 0, self.width - 1, self.height - 1), fill=fill_color)
 
     def pixel(self, x, y, color):
         self.draw.point((int(x), int(y)), fill=self._c(color))
@@ -28,17 +35,10 @@ class PILFrameBuffer:
         # Inclusive rect
         self.draw.rectangle((x, y, x + w - 1, y + h - 1), fill=self._c(color))
 
-    # --- new: safe snapshot for double-buffering ---
+    # --- optimized snapshot for minimal allocations ---
     def snapshot(self):
         return self.image.copy()
-    
-    def copy_from(self, other_image):
-        """Efficiently copy from another image to prevent allocations"""
-        if other_image.size == self.image.size and other_image.mode == self.image.mode:
-            self.image.paste(other_image)
-        else:
-            # Fallback to copy if sizes don't match
-            self.image = other_image.copy()
+
 
 
 class RegionFrameBuffer:

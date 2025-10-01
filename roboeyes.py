@@ -271,22 +271,30 @@ class RoboEyes():
 	def update( self ):
 		# Check if a sequence step must be executed
 		self.sequences.update() 
-		# Limit drawing updates to defined max framerate
-		if time.ticks_diff( time.ticks_ms(), self.fpsTimer ) >= self.frameInterval:
+		# Optimized frame rate limiting with better timing precision
+		current_time = time.ticks_ms()
+		if time.ticks_diff(current_time, self.fpsTimer) >= self.frameInterval:
 			self.draw_eyes()
-			self.fpsTimer = time.ticks_ms()
+			self.fpsTimer = current_time
 	
 
 	def clear_display( self ):
+		# More efficient fill operation
 		self.fb.fill( self.bgcolor )
 
 	# --- SETTER METHODS ----------------------------------
 	#
 	# -----------------------------------------------------
 
-	# Calculate frame interval based on defined frameRate
+	# Calculate frame interval based on defined frameRate with optimization for common rates
 	def set_framerate( self, fps ):
-		self.frameInterval = 1000//fps
+		# Optimize for common frame rates
+		if fps == 20:
+			self.frameInterval = 50  # Pre-calculated for 20 FPS
+		elif fps == 30:
+			self.frameInterval = 33  # Pre-calculated for 30 FPS
+		else:
+			self.frameInterval = max(1, 1000//fps)  # Ensure minimum 1ms interval
 
 
 	def eyes_width( self, leftEye=None, rightEye=None):
@@ -693,59 +701,56 @@ class RoboEyes():
 
 		self.clear_display() # start with a blank screen
 
-		# Draw basic eye rectangles
-		#   display.fillRoundRect(eyeLx, eyeLy, eyeLwidthCurrent, eyeLheightCurrent, eyeLborderRadiusCurrent, MAINCOLOR); // left eye
+		# Draw basic eye rectangles - optimized
 		self.gfx.fill_rrect( self.eyeLx, self.eyeLy, self.eyeLwidthCurrent, self.eyeLheightCurrent, self.eyeLborderRadiusCurrent, self.fgcolor ) # left eye
 		
 		if not self._cyclops:
-			# display.fillRoundRect(eyeRx, eyeRy, eyeRwidthCurrent, eyeRheightCurrent, eyeRborderRadiusCurrent, MAINCOLOR); // right eye
 			self.gfx.fill_rrect( self.eyeRx, self.eyeRy, self.eyeRwidthCurrent, self.eyeRheightCurrent, self.eyeRborderRadiusCurrent, self.fgcolor )
 
-
-		# Prepare mood type transitions
+		# Optimized mood type transitions - calculate all eyelid states at once
 		if self.tired:
 			self.eyelidsTiredHeightNext = self.eyeLheightCurrent//2 
 			self.eyelidsAngryHeightNext = 0
 		else:
 			self.eyelidsTiredHeightNext = 0
+			
 		if self.angry:
 			self.eyelidsAngryHeightNext = self.eyeLheightCurrent//2 
 			self.eyelidsTiredHeightNext = 0
 		else:
 			self.eyelidsAngryHeightNext = 0
+			
 		if self.happy:
 			self.eyelidsHappyBottomOffsetNext = self.eyeLheightCurrent//2
 		else:
 			self.eyelidsHappyBottomOffsetNext = 0
 
-		# Draw tired top eyelids 
+		# Update eyelid heights with smoother transitions
 		self.eyelidsTiredHeight = (self.eyelidsTiredHeight + self.eyelidsTiredHeightNext)//2
-		if not self._cyclops:
-			self.gfx.fill_triangle( self.eyeLx, self.eyeLy-1, self.eyeLx+self.eyeLwidthCurrent, self.eyeLy-1, self.eyeLx, self.eyeLy+self.eyelidsTiredHeight-1, self.bgcolor ) # left eye 
-			self.gfx.fill_triangle( self.eyeRx, self.eyeRy-1, self.eyeRx+self.eyeRwidthCurrent, self.eyeRy-1, self.eyeRx+self.eyeRwidthCurrent, self.eyeRy+self.eyelidsTiredHeight-1, self.bgcolor ) # right eye
-		else:
-			# Cyclops tired eyelids
-			self.gfx.fill_triangle( self.eyeLx, self.eyeLy-1, self.eyeLx+(self.eyeLwidthCurrent//2), self.eyeLy-1, self.eyeLx, self.eyeLy+self.eyelidsTiredHeight-1, self.bgcolor ) # left eyelid half
-			self.gfx.fill_triangle( self.eyeLx+(self.eyeLwidthCurrent//2), self.eyeLy-1, self.eyeLx+self.eyeLwidthCurrent, self.eyeLy-1, self.eyeLx+self.eyeLwidthCurrent, self.eyeLy+self.eyelidsTiredHeight-1, self.bgcolor ) # right eyelid half
-
-
-		# Draw angry top eyelids 
 		self.eyelidsAngryHeight = (self.eyelidsAngryHeight + self.eyelidsAngryHeightNext)//2
-		if not self._cyclops:
-			self.gfx.fill_triangle( self.eyeLx, self.eyeLy-1, self.eyeLx+self.eyeLwidthCurrent, self.eyeLy-1, self.eyeLx+self.eyeLwidthCurrent, self.eyeLy+self.eyelidsAngryHeight-1, self.bgcolor ) # left eye
-			self.gfx.fill_triangle( self.eyeRx, self.eyeRy-1, self.eyeRx+self.eyeRwidthCurrent, self.eyeRy-1, self.eyeRx, self.eyeRy+self.eyelidsAngryHeight-1, self.bgcolor ) # right eye
-		else:
-			# Cyclops angry eyelids
-			self.gfx.fill_triangle( self.eyeLx, self.eyeLy-1, self.eyeLx+(self.eyeLwidthCurrent//2), self.eyeLy-1, self.eyeLx+(self.eyeLwidthCurrent//2), self.eyeLy+self.eyelidsAngryHeight-1, self.bgcolor ) # left eyelid half
-			self.gfx.fill_triangle( self.eyeLx+(self.eyeLwidthCurrent//2), self.eyeLy-1, self.eyeLx+self.eyeLwidthCurrent, self.eyeLy-1, self.eyeLx+(self.eyeLwidthCurrent//2), self.eyeLy+self.eyelidsAngryHeight-1, self.bgcolor ) # right eyelid half
-		
-
-
-		# Draw happy bottom eyelids
 		self.eyelidsHappyBottomOffset = (self.eyelidsHappyBottomOffset + self.eyelidsHappyBottomOffsetNext)//2
-		self.gfx.fill_rrect( self.eyeLx-1, (self.eyeLy+self.eyeLheightCurrent)-self.eyelidsHappyBottomOffset+1, self.eyeLwidthCurrent+2, self.eyeLheightDefault, self.eyeLborderRadiusCurrent, self.bgcolor ) # left eye		
-		if not self._cyclops:
-			self.gfx.fill_rrect( self.eyeRx-1, (self.eyeRy+self.eyeRheightCurrent)-self.eyelidsHappyBottomOffset+1, self.eyeRwidthCurrent+2, self.eyeRheightDefault, self.eyeRborderRadiusCurrent, self.bgcolor ) # right eye		
+
+		# Draw eyelids only if they're visible (performance optimization)
+		if self.eyelidsTiredHeight > 0:
+			if not self._cyclops:
+				self.gfx.fill_triangle( self.eyeLx, self.eyeLy-1, self.eyeLx+self.eyeLwidthCurrent, self.eyeLy-1, self.eyeLx, self.eyeLy+self.eyelidsTiredHeight-1, self.bgcolor )
+				self.gfx.fill_triangle( self.eyeRx, self.eyeRy-1, self.eyeRx+self.eyeRwidthCurrent, self.eyeRy-1, self.eyeRx+self.eyeRwidthCurrent, self.eyeRy+self.eyelidsTiredHeight-1, self.bgcolor )
+			else:
+				self.gfx.fill_triangle( self.eyeLx, self.eyeLy-1, self.eyeLx+(self.eyeLwidthCurrent//2), self.eyeLy-1, self.eyeLx, self.eyeLy+self.eyelidsTiredHeight-1, self.bgcolor )
+				self.gfx.fill_triangle( self.eyeLx+(self.eyeLwidthCurrent//2), self.eyeLy-1, self.eyeLx+self.eyeLwidthCurrent, self.eyeLy-1, self.eyeLx+self.eyeLwidthCurrent, self.eyeLy+self.eyelidsTiredHeight-1, self.bgcolor )
+
+		if self.eyelidsAngryHeight > 0:
+			if not self._cyclops:
+				self.gfx.fill_triangle( self.eyeLx, self.eyeLy-1, self.eyeLx+self.eyeLwidthCurrent, self.eyeLy-1, self.eyeLx+self.eyeLwidthCurrent, self.eyeLy+self.eyelidsAngryHeight-1, self.bgcolor )
+				self.gfx.fill_triangle( self.eyeRx, self.eyeRy-1, self.eyeRx+self.eyeRwidthCurrent, self.eyeRy-1, self.eyeRx, self.eyeRy+self.eyelidsAngryHeight-1, self.bgcolor )
+			else:
+				self.gfx.fill_triangle( self.eyeLx, self.eyeLy-1, self.eyeLx+(self.eyeLwidthCurrent//2), self.eyeLy-1, self.eyeLx+(self.eyeLwidthCurrent//2), self.eyeLy+self.eyelidsAngryHeight-1, self.bgcolor )
+				self.gfx.fill_triangle( self.eyeLx+(self.eyeLwidthCurrent//2), self.eyeLy-1, self.eyeLx+self.eyeLwidthCurrent, self.eyeLy-1, self.eyeLx+(self.eyeLwidthCurrent//2), self.eyeLy+self.eyelidsAngryHeight-1, self.bgcolor )
+
+		if self.eyelidsHappyBottomOffset > 0:
+			self.gfx.fill_rrect( self.eyeLx-1, (self.eyeLy+self.eyeLheightCurrent)-self.eyelidsHappyBottomOffset+1, self.eyeLwidthCurrent+2, self.eyeLheightDefault, self.eyeLborderRadiusCurrent, self.bgcolor )
+			if not self._cyclops:
+				self.gfx.fill_rrect( self.eyeRx-1, (self.eyeRy+self.eyeRheightCurrent)-self.eyelidsHappyBottomOffset+1, self.eyeRwidthCurrent+2, self.eyeRheightDefault, self.eyeRborderRadiusCurrent, self.bgcolor )
 		
 		self.on_show( self ) # show drawings on display
 
