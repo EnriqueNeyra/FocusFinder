@@ -50,7 +50,7 @@ class FocusDetector:
         frame_gray_eq = self.clahe.apply(frame_gray)
         faces = self.face_cascade.detectMultiScale(
             frame_gray_eq, 
-            scaleFactor=1.08,
+            scaleFactor=1.1,
             minNeighbors=4,
             minSize=(40, 40),
         )
