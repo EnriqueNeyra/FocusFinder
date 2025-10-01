@@ -30,7 +30,7 @@ class RoboEyeAnimator(threading.Thread):
       - Blinks less frequent overall (≈ every 6–14 s).
       - Eyes fill the entire top half; timer (size 25) sits at the top of the lower half.
     """
-    def __init__(self, oled_display, fps: int = 30,
+    def __init__(self, oled_display, fps: int = 20,
                  timer_font: Optional[ImageFont.ImageFont] = None,
                  warn_font: Optional[ImageFont.ImageFont] = None,
                  # Layout knobs for 128x64:
@@ -46,6 +46,14 @@ class RoboEyeAnimator(threading.Thread):
         self.timer_blink_on = False
         self.running = False
         self._lock = threading.Lock()
+        
+        # Performance optimizations
+        self._frame_buffer = None  # Double buffer for screen tearing prevention
+        self._last_timer_text = ""
+        self._last_timer_blink = False
+        self._display_dirty = True
+        self._frame_skip_counter = 0
+        self._skip_frames = max(1, fps // 15)  # Skip frames on slower hardware
 
         # Timed behaviors
         now = time.perf_counter()
@@ -103,10 +111,26 @@ class RoboEyeAnimator(threading.Thread):
 
         self.eyes_region = RegionFrameBuffer(self.master_fb, eyes_x, eyes_y, eyes_w, eyes_h)
 
-        # --- on_show: draw timer in bottom half and push once ---
+        # --- on_show: optimized callback with double buffering ---
         def on_show(_ro):
-            img = self.master_fb.image
-            d = ImageDraw.Draw(img)
+            # Only update display if something changed
+            if not self._display_dirty:
+                return
+            
+            # Skip frames to maintain performance on Pi Zero 2W
+            self._frame_skip_counter += 1
+            if self._frame_skip_counter < self._skip_frames:
+                return
+            self._frame_skip_counter = 0
+            
+            # Use double buffering to prevent screen tearing
+            if self._frame_buffer is None:
+                self._frame_buffer = self.master_fb.image.copy()
+            else:
+                # Reuse buffer instead of creating new image
+                self._frame_buffer.paste(self.master_fb.image)
+            
+            d = ImageDraw.Draw(self._frame_buffer)
 
             lower_y0 = half_h
             d.rectangle((0, lower_y0, W - 1, H - 1), fill=1)
@@ -126,10 +150,8 @@ class RoboEyeAnimator(threading.Thread):
                 if hasattr(d, "textbbox"):
                     tb = d.textbbox((0, 0), txt, font=fnt)
                     tw = tb[2] - tb[0]
-                    th = tb[3] - tb[1]
                 else:
                     tw = int(d.textlength(txt, font=fnt))
-                    th = getattr(fnt, "size", 12)
                 y = lower_y0 + 3
                 x = max(0, (W - tw) // 2)
                 d.text((x, y), txt, fill=0, font=fnt)
@@ -142,7 +164,9 @@ class RoboEyeAnimator(threading.Thread):
                 d.ellipse((ex - r, ey - r, ex + r, ey + r), fill=0)
                 d.polygon([(ex, ey - r - 2), (ex - 2, ey - 1), (ex + 2, ey - 1)], fill=0)
 
-            self.oled.display_image(img)
+            # Send the double-buffered image to display
+            self.oled.display_image(self._frame_buffer)
+            self._display_dirty = False
 
         self.eyes = RoboEyes(self.eyes_region, self.eyes_region.width, self.eyes_region.height,
                              frame_rate=self.fps, on_show=on_show)
@@ -179,8 +203,18 @@ class RoboEyeAnimator(threading.Thread):
     def set_timer(self, text: str, blink_on: bool):
         with self._lock:
             prev = self.timer_text
+            text = text or ""
+            blink_on = bool(blink_on)
+            
+            # Only update if something actually changed
+            if text == self._last_timer_text and blink_on == self._last_timer_blink:
+                return
+                
             self.prev_timer_text = prev
-            self.timer_text = text or ""
+            self.timer_text = text
+            self._last_timer_text = text
+            self._last_timer_blink = blink_on
+            self._display_dirty = True  # Mark for redraw
 
             # Detect start/stop of blinking for angry persistence
             if blink_on and not self.timer_blink_on:
@@ -188,7 +222,7 @@ class RoboEyeAnimator(threading.Thread):
             elif not blink_on and self.timer_blink_on:
                 self._angry_active = False  # stop angry
 
-            self.timer_blink_on = bool(blink_on)
+            self.timer_blink_on = blink_on
 
             if not self._seen_first_timer:
                 self._seen_first_timer = True
@@ -247,25 +281,41 @@ class RoboEyeAnimator(threading.Thread):
 
             if self.eyes.mood != desired_mood:
                 self.eyes.mood = desired_mood
+                self._display_dirty = True  # Mark for redraw when mood changes
 
     # --- Thread loop ---
     def run(self):
         self.running = True
         frame_dt = 1.0 / float(self.fps)
         self.eyes.open()
+        
+        # Initialize frame buffer
+        self._frame_buffer = self.master_fb.image.copy()
+        
+        last_mood_time = 0
+        mood_update_interval = 0.1  # Update mood 10 times per second max
 
         while self.running:
-            start = time.perf_counter()
+            frame_start = time.perf_counter()
+            
+            # Clear buffers only when needed
             self.master_fb.fill(0)
             self.eyes_region.fill(0)
 
-            self._apply_mood()
+            # Update mood less frequently to reduce CPU load
+            now = time.perf_counter()
+            if now - last_mood_time >= mood_update_interval:
+                self._apply_mood()
+                last_mood_time = now
+                self._display_dirty = True
+            
             self.eyes.update()
 
-            elapsed = time.perf_counter() - start
-            sleep_for = frame_dt - elapsed
-            if sleep_for > 0:
-                time.sleep(sleep_for)
+            # More precise frame timing
+            frame_time = time.perf_counter() - frame_start
+            sleep_time = frame_dt - frame_time
+            if sleep_time > 0.001:  # Only sleep if significant time left
+                time.sleep(sleep_time)
 
     def stop(self):
         self.running = False

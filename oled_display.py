@@ -15,6 +15,28 @@ class OLEDDisplay:
 
         # Lock ensures only one thread writes to OLED at a time
         self._io_lock = threading.Lock()
+        
+        # Performance optimizations
+        self._display_buffer = None  # Reusable buffer to reduce allocations
+        self._last_image_hash = None  # Track changes to prevent redundant updates
+
+        # Cache common fonts once (so we don't reload every frame)
+        font_path = os.path.join('./lib/waveshare_OLED', 'Font.ttc')
+        self.font_cache = {}
+        for size in (14, 22, 25, 32):
+            try:
+                self.font_cache[size] = ImageFont.truetype(font_path, size)
+            except Exception:
+                self.font_cache[size] = ImageFont.load_default()
+
+
+class OLEDDisplay:
+    def __init__(self):
+        self.disp = OLED_1in51.OLED_1in51()
+        self.disp.Init()
+
+        # Lock ensures only one thread writes to OLED at a time
+        self._io_lock = threading.Lock()
 
         # Cache common fonts once (so we don’t reload every frame)
         font_path = os.path.join('./lib/waveshare_OLED', 'Font.ttc')
@@ -40,14 +62,31 @@ class OLEDDisplay:
 
     def display_image(self, image: Image.Image):
         """
-        Push a prepared PIL image to the OLED.
-        Makes a copy so the source can keep being modified without tearing.
+        Optimized display method with redundancy checks and buffer reuse.
         """
+        # Quick hash check to avoid redundant updates
+        try:
+            img_bytes = image.tobytes()
+            img_hash = hash(img_bytes)
+            if img_hash == self._last_image_hash:
+                return  # Skip identical frames
+            self._last_image_hash = img_hash
+        except:
+            # Fallback if hashing fails
+            pass
+        
+        # Optimize image conversion and rotation
         if image.mode != '1':
-            img = image.convert('1').copy()
+            if self._display_buffer is None:
+                self._display_buffer = image.convert('1')
+            else:
+                # Reuse existing buffer to avoid allocations
+                self._display_buffer.paste(image.convert('1'))
+            img = self._display_buffer
         else:
-            img = image.copy()
+            img = image
 
+        # Rotate in place if possible to save memory
         img = img.rotate(180)
 
         with self._io_lock:

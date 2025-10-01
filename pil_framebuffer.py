@@ -31,6 +31,14 @@ class PILFrameBuffer:
     # --- new: safe snapshot for double-buffering ---
     def snapshot(self):
         return self.image.copy()
+    
+    def copy_from(self, other_image):
+        """Efficiently copy from another image to prevent allocations"""
+        if other_image.size == self.image.size and other_image.mode == self.image.mode:
+            self.image.paste(other_image)
+        else:
+            # Fallback to copy if sizes don't match
+            self.image = other_image.copy()
 
 
 class RegionFrameBuffer:
