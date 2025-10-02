@@ -224,6 +224,10 @@ class RoboEyeAnimator(threading.Thread):
             elif not blink_on and self.timer_blink_on:
                 self._distracted_blinking = False
                 self._angry_active = False  # stop angry
+            
+            # Ensure angry state persists throughout the entire blinking period
+            if blink_on:
+                self._angry_active = True
 
             self.timer_blink_on = blink_on
 
