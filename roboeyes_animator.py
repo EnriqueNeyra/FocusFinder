@@ -216,9 +216,11 @@ class RoboEyeAnimator(threading.Thread):
 
             # Detect start/stop of blinking for angry persistence
             if blink_on and not self.timer_blink_on:
-                if self.mode == FocusMode.DISTRACTED:
+                # Always set angry active when blinking starts (could be warning or distracted)
+                self._angry_active = True
+                # Track distracted blinking specifically for consistent angry behavior
+                if self.mode == FocusMode.DISTRACTED or self.mode == FocusMode.WARNING:
                     self._distracted_blinking = True
-                    self._angry_active = True   # start angry
             elif not blink_on and self.timer_blink_on:
                 self._distracted_blinking = False
                 self._angry_active = False  # stop angry
@@ -285,8 +287,8 @@ class RoboEyeAnimator(threading.Thread):
 
                 elif distracted:
                     self.eyes.set_idle_mode(True, interval=1, variation=2)
-                    # During distracted blinking, maintain angry mood and flicker consistently
-                    if self._distracted_blinking:
+                    # Use _angry_active to determine angry mood, similar to warning state
+                    if self._angry_active:
                         desired_mood = ANGRY
                         if now >= self._next_warning_burst:
                             self._warning_shake_on_until = now + 0.12
