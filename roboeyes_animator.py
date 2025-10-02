@@ -179,9 +179,13 @@ class RoboEyeAnimator(threading.Thread):
         self.eyes.eyes_height(EYE_H, EYE_H)
         self.eyes.eyes_radius(EYE_R, EYE_R)
         self.eyes.eyes_spacing(EYE_SPACE)
+        self.eyes.eyes_spacing(EYE_SPACE)
 
         self.eyes.set_auto_blinker(True, interval=6, variation=8)
         self.eyes.set_idle_mode(True, interval=1, variation=2)
+
+        # Store original screen height for curious eye constraint adjustment
+        self._original_screen_height = self.eyes.screenHeight
 
         self._apply_mood(initial=True)
 
@@ -289,6 +293,8 @@ class RoboEyeAnimator(threading.Thread):
                     self.eyes.set_idle_mode(True, interval=1, variation=2)
                     # Ensure flicker is turned off when returning to focused state
                     self.eyes.horiz_flicker(False)
+                    # Reset screen constraints for non-curious mode
+                    self.eyes.screenHeight = self._original_screen_height
                     if now >= self._next_happy_check and now >= self._happy_until:
                         if random.random() < 0.45:
                             self._happy_until = now + 3.0
@@ -297,6 +303,8 @@ class RoboEyeAnimator(threading.Thread):
 
                 elif warning:
                     self.eyes.set_idle_mode(True, interval=1, variation=2)
+                    # Reset screen constraints for non-curious mode
+                    self.eyes.screenHeight = self._original_screen_height
                     if self._at_risk_period:
                         desired_mood = ANGRY
                         # Longer flicker duration for more pronounced effect
@@ -318,12 +326,18 @@ class RoboEyeAnimator(threading.Thread):
                             self._next_warning_burst = now + 0.6 + random.uniform(0.0, 0.3)  # Faster bursts
                         self.eyes.horiz_flicker(now < self._warning_shake_on_until, amplitude=2)
                         self.eyes.set_idle_mode(True, interval=1, variation=2)
+                        # Reset screen constraints for non-curious mode
+                        self.eyes.screenHeight = self._original_screen_height
                     else:
                         # When distracted (idle at 00:00), show curiosity with enhanced movement
                         desired_mood = CURIOUS
                         self.eyes.horiz_flicker(False)
                         # Increase idle movement to show more curiosity
                         self.eyes.set_idle_mode(True, interval=1, variation=1)
+                        # Reduce effective screen height to prevent curious eye clipping
+                        # Curious eyes can enlarge by ~30%, so reduce constraint by that amount
+                        curious_margin = int(self.eyes.eyeLheightDefault * 0.3) + 4
+                        self.eyes.screenHeight = self._original_screen_height - curious_margin
 
                 if now < self._sad_until:
                     desired_mood = TIRED
