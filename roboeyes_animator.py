@@ -334,10 +334,13 @@ class RoboEyeAnimator(threading.Thread):
                         self.eyes.horiz_flicker(False)
                         # Increase idle movement to show more curiosity
                         self.eyes.set_idle_mode(True, interval=1, variation=1)
-                        # Reduce effective screen height to prevent curious eye clipping
-                        # Curious eyes can enlarge by ~30%, so reduce constraint by that amount
-                        curious_margin = int(self.eyes.eyeLheightDefault * 0.3) + 4
-                        self.eyes.screenHeight = self._original_screen_height - curious_margin
+                        # Prevent curious eye clipping by adjusting the vertical constraint
+                        # Curious eyes add 8 pixels height offset, and eye enlargement extends in both directions
+                        # so we need to account for upward expansion to prevent clipping at the top
+                        curious_offset = 8    # From roboeyes.py curious enlargement logic
+                        safety_margin = 8     # Extra safety buffer to ensure no clipping
+                        total_margin = curious_offset + safety_margin
+                        self.eyes.screenHeight = self._original_screen_height - total_margin
 
                 if now < self._sad_until:
                     desired_mood = TIRED
