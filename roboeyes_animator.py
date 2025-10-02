@@ -250,9 +250,11 @@ class RoboEyeAnimator(threading.Thread):
 
             # Create state tuple for efficient comparison
             current_mood_state = (focused, warning, distracted, self._angry_active, 
-                                now < self._startup_until, now < self._happy_until, now < self._sad_until)
+                                now < self._startup_until, now < self._happy_until, now < self._sad_until,
+                                self.timer_blink_on, now < self._warning_shake_on_until)
             
-            if not initial and current_mood_state == self._last_mood_state:
+            # Don't skip mood updates when angry is active to ensure consistent angry behavior
+            if not initial and current_mood_state == self._last_mood_state and not self._angry_active:
                 return  # No mood change, skip expensive operations
             
             self._last_mood_state = current_mood_state
