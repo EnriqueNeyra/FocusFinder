@@ -67,6 +67,8 @@ class RoboEyeAnimator(threading.Thread):
         # Track angry persistence during blink period
         self._angry_active = False
         self._distracted_blinking = False
+        self._at_risk_period = False  # Track if we're in an at-risk period (spanning multiple blink cycles)
+        self._last_blink_time = 0.0  # Track when we last saw blinking activity
 
         # Fonts
         if timer_font is None:
@@ -197,6 +199,7 @@ class RoboEyeAnimator(threading.Thread):
             if prev_mode == FocusMode.DISTRACTED and self.mode != FocusMode.DISTRACTED:
                 self._distracted_blinking = False
                 self._angry_active = False
+                self._at_risk_period = False
         self._apply_mood()
 
     def set_timer(self, text: str, blink_on: bool):
@@ -214,20 +217,26 @@ class RoboEyeAnimator(threading.Thread):
             self.prev_timer_text = prev
             self.timer_text = text
 
-            # Detect start/stop of blinking for angry persistence
-            if blink_on and not self.timer_blink_on:
-                # Always set angry active when blinking starts (could be warning or distracted)
-                self._angry_active = True
-                # Track distracted blinking specifically for consistent angry behavior
-                if self.mode == FocusMode.DISTRACTED or self.mode == FocusMode.WARNING:
-                    self._distracted_blinking = True
-            elif not blink_on and self.timer_blink_on:
-                self._distracted_blinking = False
-                self._angry_active = False  # stop angry
-            
-            # Ensure angry state persists throughout the entire blinking period
+            # Track at-risk state: any blink_on=True indicates start of at-risk period
+            # At-risk period ends only when we get a non-blinking call or switch modes
+            now_time = time.perf_counter()
             if blink_on:
+                # Any blink_on=True means we're in an at-risk period
+                self._at_risk_period = True
                 self._angry_active = True
+                self._last_blink_time = now_time
+            elif self._at_risk_period and not blink_on:
+                # During at-risk period, blink_on=False means "show timer" phase
+                # but we should stay angry throughout the entire at-risk period
+                self._angry_active = True  # Keep angry active
+                # Auto-timeout: if no blink activity for 3+ seconds, end at-risk period
+                if now_time - self._last_blink_time > 3.0:
+                    self._at_risk_period = False
+                    self._angry_active = False
+            else:
+                # Not in at-risk period and not blinking
+                self._at_risk_period = False
+                self._angry_active = False
 
             self.timer_blink_on = blink_on
 
