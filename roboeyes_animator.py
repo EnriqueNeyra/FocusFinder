@@ -299,7 +299,7 @@ class RoboEyeAnimator(threading.Thread):
                         desired_mood = CURIOUS
                         self.eyes.horiz_flicker(False)
                         # Increase idle movement to show more curiosity
-                        self.eyes.set_idle_mode(True, interval=0.8, variation=1.5)
+                        self.eyes.set_idle_mode(True, interval=1, variation=1)
 
                 if now < self._sad_until:
                     desired_mood = TIRED
