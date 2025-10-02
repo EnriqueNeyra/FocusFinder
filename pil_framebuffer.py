@@ -17,15 +17,8 @@ class PILFrameBuffer:
         return 0 if v == 1 else 1
 
     def fill(self, color):
-        # Use more efficient fill method
-        fill_color = self._c(color)
-        if hasattr(self.image, 'paste'):
-            # Create a small 1x1 image and paste it over the whole area (faster than rectangle)
-            fill_img = Image.new("1", (1, 1), fill_color)
-            self.image.paste(fill_img, (0, 0, self.width, self.height))
-        else:
-            # Fallback to rectangle
-            self.draw.rectangle((0, 0, self.width - 1, self.height - 1), fill=fill_color)
+        # Reliable and efficient rectangle fill
+        self.draw.rectangle((0, 0, self.width - 1, self.height - 1), fill=self._c(color))
 
     def pixel(self, x, y, color):
         self.draw.point((int(x), int(y)), fill=self._c(color))
