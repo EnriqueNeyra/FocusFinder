@@ -66,6 +66,7 @@ class RoboEyeAnimator(threading.Thread):
 
         # Track angry persistence during blink period
         self._angry_active = False
+        self._distracted_blinking = False
 
         # Fonts
         if timer_font is None:
@@ -184,12 +185,18 @@ class RoboEyeAnimator(threading.Thread):
     # --- External API ---
     def set_state(self, focused: bool, warning: bool = False):
         with self._lock:
+            prev_mode = self.mode
             if focused:
                 self.mode = FocusMode.FOCUSED
             elif warning:
                 self.mode = FocusMode.WARNING
             else:
                 self.mode = FocusMode.DISTRACTED
+            
+            # Reset distracted blinking state when leaving distracted mode
+            if prev_mode == FocusMode.DISTRACTED and self.mode != FocusMode.DISTRACTED:
+                self._distracted_blinking = False
+                self._angry_active = False
         self._apply_mood()
 
     def set_timer(self, text: str, blink_on: bool):
@@ -209,8 +216,11 @@ class RoboEyeAnimator(threading.Thread):
 
             # Detect start/stop of blinking for angry persistence
             if blink_on and not self.timer_blink_on:
-                self._angry_active = True   # start angry
+                if self.mode == FocusMode.DISTRACTED:
+                    self._distracted_blinking = True
+                    self._angry_active = True   # start angry
             elif not blink_on and self.timer_blink_on:
+                self._distracted_blinking = False
                 self._angry_active = False  # stop angry
 
             self.timer_blink_on = blink_on
@@ -253,6 +263,8 @@ class RoboEyeAnimator(threading.Thread):
 
                 if focused:
                     self.eyes.set_idle_mode(True, interval=1, variation=2)
+                    # Ensure flicker is turned off when returning to focused state
+                    self.eyes.horiz_flicker(False)
                     if now >= self._next_happy_check and now >= self._happy_until:
                         if random.random() < 0.45:
                             self._happy_until = now + 3.0
@@ -273,7 +285,16 @@ class RoboEyeAnimator(threading.Thread):
 
                 elif distracted:
                     self.eyes.set_idle_mode(True, interval=1, variation=2)
-                    desired_mood = DEFAULT
+                    # During distracted blinking, maintain angry mood and flicker consistently
+                    if self._distracted_blinking:
+                        desired_mood = ANGRY
+                        if now >= self._next_warning_burst:
+                            self._warning_shake_on_until = now + 0.12
+                            self._next_warning_burst = now + 0.8 + random.uniform(0.0, 0.4)
+                        self.eyes.horiz_flicker(now < self._warning_shake_on_until, amplitude=2)
+                    else:
+                        self.eyes.horiz_flicker(False)
+                        desired_mood = DEFAULT
 
                 if now < self._sad_until:
                     desired_mood = TIRED
