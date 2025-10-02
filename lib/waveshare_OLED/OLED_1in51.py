@@ -99,33 +99,26 @@ class OLED_1in51(config.RaspberryPi):
         time.sleep(0.1)
     
     def getbuffer(self, image):
-        # Correct buffer size: width * (height/8 pages)
-        buf = [0x00] * (self.width * (self.height // 8))
+        buf = [0xFF] * ((self.width//8) * self.height)
         image_monocolor = image.convert('1')
         imwidth, imheight = image_monocolor.size
         pixels = image_monocolor.load()
 
         if(imwidth == self.width and imheight == self.height):
-            # Correct bit mapping for OLED page addressing
+            # print ("Vertical")
             for y in range(imheight):
                 for x in range(imwidth):
                     # Set the bits for the column of pixels at the current position.
-                    if pixels[x, y] == 0:  # 0 = black pixel should be set
-                        page = y // 8
-                        bit_pos = y % 8
-                        buf_index = x + page * self.width
-                        buf[buf_index] |= (1 << bit_pos)
+                    if pixels[x, y] == 0:
+                        buf[x + (y // 8) * self.width] &= ~(1 << (y % 8))        
         elif(imwidth == self.height and imheight == self.width):
-            # Handle rotated images correctly
+            # print ("Vertical")
             for y in range(imheight):
                 for x in range(imwidth):
                     newx = y
                     newy = self.height - x - 1
                     if pixels[x, y] == 0:
-                        page = newy // 8
-                        bit_pos = newy % 8
-                        buf_index = newx + page * self.width
-                        buf[buf_index] |= (1 << bit_pos)
+                        buf[(newx + (newy // 8 )*self.width) ] &= ~(1 << (y % 8))
         return buf
             
     def ShowImage(self, pBuf):
@@ -140,12 +133,12 @@ class OLED_1in51(config.RaspberryPi):
             time.sleep(0.001)  # 1ms instead of 10ms
             if(self.Device == Device_SPI):
                 self.digital_write(self.DC_PIN,True)
-                # Write bytes individually for proper OLED timing
+                # Write bytes individually for proper OLED timing with original inversion
                 for i in range(0,self.width):
-                    self.spi_writebyte([pBuf[i+self.width*page]])  # Remove inversion
+                    self.spi_writebyte([~pBuf[i+self.width*page]])
             else :
                 for i in range(0,self.width):
-                    self.i2c_writebyte(0x40, pBuf[i+self.width*page])  # Remove inversion
+                    self.i2c_writebyte(0x40, ~pBuf[i+self.width*page])
                        
     def clear(self):
         """Clear contents of image buffer"""
