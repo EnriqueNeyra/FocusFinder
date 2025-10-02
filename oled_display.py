@@ -40,16 +40,14 @@ class OLEDDisplay:
 
     def display_image(self, image: Image.Image):
         """
-        Optimized display method with proper 1-bit image handling.
+        Display method that matches working examples exactly.
         """
-        # Ensure proper 1-bit conversion and rotation
+        # Convert to 1-bit if needed, then rotate
         if image.mode != '1':
-            # Convert to 1-bit with proper dithering
-            img = image.convert('1', dither=Image.NONE)
+            img = image.convert('1')
         else:
             img = image
         
-        # Rotate the image
         img = img.rotate(180)
 
         with self._io_lock:

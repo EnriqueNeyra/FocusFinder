@@ -9,8 +9,8 @@ class PILFrameBuffer:
     def __init__(self, width, height):
         self.width  = int(width)
         self.height = int(height)
-        # Initialize with 0 (black) for consistent 1-bit image handling
-        self.image  = Image.new("1", (self.width, self.height), 0)
+        # Initialize with WHITE background to match working examples
+        self.image  = Image.new("1", (self.width, self.height), "WHITE")
         self.draw   = ImageDraw.Draw(self.image)
 
     def _c(self, v):
