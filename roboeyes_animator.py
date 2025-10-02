@@ -240,6 +240,12 @@ class RoboEyeAnimator(threading.Thread):
 
             self.timer_blink_on = blink_on
 
+            # Detect timer reset to 00:00 and clear at-risk state
+            if text == "00:00" and prev != "00:00" and not blink_on:
+                # Timer was reset, clear at-risk period
+                self._at_risk_period = False
+                self._angry_active = False
+
             if not self._seen_first_timer:
                 self._seen_first_timer = True
             else:
@@ -258,12 +264,12 @@ class RoboEyeAnimator(threading.Thread):
             distracted = (self.mode == FocusMode.DISTRACTED)
 
             # Create state tuple for efficient comparison
-            current_mood_state = (focused, warning, distracted, self._angry_active, 
+            current_mood_state = (focused, warning, distracted, self._at_risk_period,
                                 now < self._startup_until, now < self._happy_until, now < self._sad_until,
-                                self.timer_blink_on, now < self._warning_shake_on_until)
+                                self.timer_blink_on, int(now * 10))  # Include time component for flicker updates
             
-            # Don't skip mood updates when angry is active to ensure consistent angry behavior
-            if not initial and current_mood_state == self._last_mood_state and not self._angry_active:
+            # Always update mood during at-risk period to ensure consistent flicker
+            if not initial and current_mood_state == self._last_mood_state and not self._at_risk_period:
                 return  # No mood change, skip expensive operations
             
             self._last_mood_state = current_mood_state
@@ -290,8 +296,9 @@ class RoboEyeAnimator(threading.Thread):
 
                 elif warning:
                     self.eyes.set_idle_mode(True, interval=1, variation=2)
-                    if self._angry_active:
+                    if self._at_risk_period:
                         desired_mood = ANGRY
+                        # Always update flicker timing during at-risk period
                         if now >= self._next_warning_burst:
                             self._warning_shake_on_until = now + 0.12
                             self._next_warning_burst = now + 0.8 + random.uniform(0.0, 0.4)
@@ -301,9 +308,10 @@ class RoboEyeAnimator(threading.Thread):
                         desired_mood = DEFAULT
 
                 elif distracted:
-                    # Use _angry_active to determine angry mood, similar to warning state
-                    if self._angry_active:
+                    if self._at_risk_period:
+                        # During at-risk period, stay consistently angry with flicker
                         desired_mood = ANGRY
+                        # Always update flicker timing during at-risk period
                         if now >= self._next_warning_burst:
                             self._warning_shake_on_until = now + 0.12
                             self._next_warning_burst = now + 0.8 + random.uniform(0.0, 0.4)
