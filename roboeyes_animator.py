@@ -8,7 +8,7 @@ from PIL import ImageDraw, ImageFont
 
 import mp_time_shim  # patches time.ticks_* for the MicroPython-style timing
 
-from roboeyes import RoboEyes, DEFAULT, ANGRY, HAPPY, TIRED
+from roboeyes import RoboEyes, DEFAULT, ANGRY, HAPPY, TIRED, CURIOUS
 from pil_framebuffer import PILFrameBuffer, RegionFrameBuffer
 
 
@@ -286,7 +286,6 @@ class RoboEyeAnimator(threading.Thread):
                         desired_mood = DEFAULT
 
                 elif distracted:
-                    self.eyes.set_idle_mode(True, interval=1, variation=2)
                     # Use _angry_active to determine angry mood, similar to warning state
                     if self._angry_active:
                         desired_mood = ANGRY
@@ -294,9 +293,13 @@ class RoboEyeAnimator(threading.Thread):
                             self._warning_shake_on_until = now + 0.12
                             self._next_warning_burst = now + 0.8 + random.uniform(0.0, 0.4)
                         self.eyes.horiz_flicker(now < self._warning_shake_on_until, amplitude=2)
+                        self.eyes.set_idle_mode(True, interval=1, variation=2)
                     else:
+                        # When distracted (idle at 00:00), show curiosity with enhanced movement
+                        desired_mood = CURIOUS
                         self.eyes.horiz_flicker(False)
-                        desired_mood = DEFAULT
+                        # Increase idle movement to show more curiosity
+                        self.eyes.set_idle_mode(True, interval=0.8, variation=1.5)
 
                 if now < self._sad_until:
                     desired_mood = TIRED
