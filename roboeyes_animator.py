@@ -149,7 +149,7 @@ class RoboEyeAnimator(threading.Thread):
                     tw = tb[2] - tb[0]
                 else:
                     tw = int(d.textlength(txt, font=fnt))
-                y = timer_area_y
+                y = timer_area_y - 2
                 x = max(0, (W - tw) // 2)
                 d.text((x, y), txt, fill=0, font=fnt)
 
