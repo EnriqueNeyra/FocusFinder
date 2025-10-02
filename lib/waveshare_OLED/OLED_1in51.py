@@ -130,7 +130,7 @@ class OLED_1in51(config.RaspberryPi):
             # set high column address #
             self.command(0x10); 
             # write data #
-            time.sleep(0.001)
+            time.sleep(0.01)
             if(self.Device == Device_SPI):
                 self.digital_write(self.DC_PIN,True)
             for i in range(0,self.width):
