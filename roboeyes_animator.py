@@ -266,7 +266,7 @@ class RoboEyeAnimator(threading.Thread):
             # Create state tuple for efficient comparison
             current_mood_state = (focused, warning, distracted, self._at_risk_period,
                                 now < self._startup_until, now < self._happy_until, now < self._sad_until,
-                                self.timer_blink_on, int(now * 10))  # Include time component for flicker updates
+                                self.timer_blink_on, int(now * 5))  # Reduce update frequency to 200ms
             
             # Always update mood during at-risk period to ensure consistent flicker
             if not initial and current_mood_state == self._last_mood_state and not self._at_risk_period:
@@ -298,10 +298,10 @@ class RoboEyeAnimator(threading.Thread):
                     self.eyes.set_idle_mode(True, interval=1, variation=2)
                     if self._at_risk_period:
                         desired_mood = ANGRY
-                        # Always update flicker timing during at-risk period
+                        # Longer flicker duration for more pronounced effect
                         if now >= self._next_warning_burst:
-                            self._warning_shake_on_until = now + 0.12
-                            self._next_warning_burst = now + 0.8 + random.uniform(0.0, 0.4)
+                            self._warning_shake_on_until = now + 0.25  # Increased from 0.12 to 0.25
+                            self._next_warning_burst = now + 0.6 + random.uniform(0.0, 0.3)  # Faster bursts
                         self.eyes.horiz_flicker(now < self._warning_shake_on_until, amplitude=2)
                     else:
                         self.eyes.horiz_flicker(False)
@@ -311,10 +311,10 @@ class RoboEyeAnimator(threading.Thread):
                     if self._at_risk_period:
                         # During at-risk period, stay consistently angry with flicker
                         desired_mood = ANGRY
-                        # Always update flicker timing during at-risk period
+                        # Longer flicker duration for more pronounced effect
                         if now >= self._next_warning_burst:
-                            self._warning_shake_on_until = now + 0.12
-                            self._next_warning_burst = now + 0.8 + random.uniform(0.0, 0.4)
+                            self._warning_shake_on_until = now + 0.25  # Increased from 0.12 to 0.25
+                            self._next_warning_burst = now + 0.6 + random.uniform(0.0, 0.3)  # Faster bursts
                         self.eyes.horiz_flicker(now < self._warning_shake_on_until, amplitude=2)
                         self.eyes.set_idle_mode(True, interval=1, variation=2)
                     else:
