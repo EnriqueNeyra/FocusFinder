@@ -93,12 +93,13 @@ class RoboEyeAnimator(threading.Thread):
         W, H = self.oled.width, self.oled.height
         self.master_fb = PILFrameBuffer(W, H)
 
-        # Eyes region
-        half_h = H // 2
+        # Eyes region - use 60% of screen height for more eye movement
+        eyes_area_height = int(H * 0.6)  # 60% for eyes
+        timer_area_y = eyes_area_height   # Timer starts at 60% mark
         eyes_x = margin_x
         eyes_y = margin_top
         eyes_w = W - 2 * margin_x
-        eyes_h = half_h - eyes_y - gap_mid
+        eyes_h = eyes_area_height - eyes_y - gap_mid
 
         MIN_EYE_W, MIN_EYE_H, MIN_SPACE = 20, 16, 4
         MIN_REGION_W = 2 * MIN_EYE_W + MIN_SPACE + 2
@@ -108,8 +109,8 @@ class RoboEyeAnimator(threading.Thread):
 
         if eyes_x + eyes_w > W:
             eyes_w = W - eyes_x
-        if eyes_y + eyes_h > half_h:
-            eyes_h = half_h - eyes_y
+        if eyes_y + eyes_h > eyes_area_height:
+            eyes_h = eyes_area_height - eyes_y
 
         self.eyes_region = RegionFrameBuffer(self.master_fb, eyes_x, eyes_y, eyes_w, eyes_h)
 
@@ -128,8 +129,8 @@ class RoboEyeAnimator(threading.Thread):
             img = self.master_fb.image
             d = ImageDraw.Draw(img)
 
-            lower_y0 = half_h
-            d.rectangle((0, lower_y0, W - 1, H - 1), fill=1)
+            # Timer area starts at 60% of screen height
+            d.rectangle((0, timer_area_y, W - 1, H - 1), fill=1)
 
             txt = None
             fnt = self.timer_font
@@ -148,7 +149,7 @@ class RoboEyeAnimator(threading.Thread):
                     tw = tb[2] - tb[0]
                 else:
                     tw = int(d.textlength(txt, font=fnt))
-                y = lower_y0 + 3
+                y = timer_area_y + 3
                 x = max(0, (W - tw) // 2)
                 d.text((x, y), txt, fill=0, font=fnt)
 
