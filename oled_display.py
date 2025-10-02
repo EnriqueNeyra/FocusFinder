@@ -40,13 +40,17 @@ class OLEDDisplay:
 
     def display_image(self, image: Image.Image):
         """
-        Optimized display method with minimal allocations and faster processing.
+        Optimized display method with proper 1-bit image handling.
         """
-        # Convert and rotate in one step to minimize operations
+        # Ensure proper 1-bit conversion and rotation
         if image.mode != '1':
-            img = image.convert('1').rotate(180)
+            # Convert to 1-bit with proper dithering
+            img = image.convert('1', dither=Image.NONE)
         else:
-            img = image.rotate(180)
+            img = image
+        
+        # Rotate the image
+        img = img.rotate(180)
 
         with self._io_lock:
             self.disp.ShowImage(self.disp.getbuffer(img))
