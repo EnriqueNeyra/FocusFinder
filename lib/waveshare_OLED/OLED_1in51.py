@@ -129,14 +129,15 @@ class OLED_1in51(config.RaspberryPi):
             self.command(0x00); 
             # set high column address #
             self.command(0x10); 
-            # write data #
-            time.sleep(0.01)
+            # Small delay to prevent tearing but maintain performance
+            time.sleep(0.002)  # 2ms instead of 10ms
             if(self.Device == Device_SPI):
                 self.digital_write(self.DC_PIN,True)
-            for i in range(0,self.width):
-                if(self.Device == Device_SPI):
-                    self.spi_writebyte([~pBuf[i+self.width*page]]); 
-                else :
+                # Write bytes individually for proper OLED timing with original inversion
+                for i in range(0,self.width):
+                    self.spi_writebyte([~pBuf[i+self.width*page]])
+            else :
+                for i in range(0,self.width):
                     self.i2c_writebyte(0x40, ~pBuf[i+self.width*page])
                        
     def clear(self):

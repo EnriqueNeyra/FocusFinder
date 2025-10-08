@@ -18,7 +18,7 @@ def main():
 
     # NEW: start OLED + Animator (single writer to the display)
     oled = OLEDDisplay()
-    eyes_anim = EyeAnimator(oled, fps=20, timer_font=None)
+    eyes_anim = EyeAnimator(oled, fps=15, timer_font=None)  # Reduced FPS for Pi Zero 2W
     eyes_anim.start()
 
     # Pass animator into the timer thread

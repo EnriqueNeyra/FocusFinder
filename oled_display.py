@@ -40,14 +40,14 @@ class OLEDDisplay:
 
     def display_image(self, image: Image.Image):
         """
-        Push a prepared PIL image to the OLED.
-        Makes a copy so the source can keep being modified without tearing.
+        Display method that matches working examples exactly.
         """
+        # Convert to 1-bit if needed, then rotate
         if image.mode != '1':
-            img = image.convert('1').copy()
+            img = image.convert('1')
         else:
-            img = image.copy()
-
+            img = image
+        
         img = img.rotate(180)
 
         with self._io_lock:

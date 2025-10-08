@@ -9,7 +9,8 @@ class PILFrameBuffer:
     def __init__(self, width, height):
         self.width  = int(width)
         self.height = int(height)
-        self.image  = Image.new("1", (self.width, self.height), 1)  # white
+        # Initialize with WHITE background to match working examples
+        self.image  = Image.new("1", (self.width, self.height), "WHITE")
         self.draw   = ImageDraw.Draw(self.image)
 
     def _c(self, v):
@@ -17,7 +18,7 @@ class PILFrameBuffer:
         return 0 if v == 1 else 1
 
     def fill(self, color):
-        # Inclusive rectangle clear to prevent edge artifacts (top/left dots)
+        # Reliable and efficient rectangle fill
         self.draw.rectangle((0, 0, self.width - 1, self.height - 1), fill=self._c(color))
 
     def pixel(self, x, y, color):
@@ -28,9 +29,10 @@ class PILFrameBuffer:
         # Inclusive rect
         self.draw.rectangle((x, y, x + w - 1, y + h - 1), fill=self._c(color))
 
-    # --- new: safe snapshot for double-buffering ---
+    # --- optimized snapshot for minimal allocations ---
     def snapshot(self):
         return self.image.copy()
+
 
 
 class RegionFrameBuffer:

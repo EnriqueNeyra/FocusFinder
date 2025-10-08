@@ -29,7 +29,7 @@ class FocusDetector:
         
         for (ex, ey, ew, eh) in eyes: 
             # Eyes should be in upper half of face
-            if ey < face_height * 0.55:
+            if ey < face_height * 0.45:
                 # Eyes shouldn't be too close to edges
                 eye_center_x = ex + ew//2
                 if 0.15 * face_width < eye_center_x < 0.85 * face_width:
