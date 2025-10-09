@@ -171,17 +171,16 @@ class RoboEyeAnimator(threading.Thread):
         with self._lock:
             if focused:
                 self.mode = FocusMode.FOCUSED
-            elif warning:
-                self.mode = FocusMode.WARNING
-            else:
-                self.mode = FocusMode.DISTRACTED
-            
-            # Clear at-risk state and flicker when leaving distracted mode
-            if self.mode != FocusMode.DISTRACTED:
+                # Clear at-risk state only when becoming focused
                 self._at_risk_period = False
                 self._warning_shake_on_until = 0.0
-                # Also ensure flicker is turned off immediately
                 self.eyes.horiz_flicker(False)
+            elif warning:
+                self.mode = FocusMode.WARNING
+                # Do NOT clear at-risk state - WARNING mode is used during at-risk periods
+            else:
+                self.mode = FocusMode.DISTRACTED
+                # Do NOT clear at-risk state - DISTRACTED mode is used during at-risk periods
         self._apply_mood()
 
     def set_timer(self, text: str, blink_on: bool):
