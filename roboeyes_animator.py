@@ -220,12 +220,15 @@ class RoboEyeAnimator(threading.Thread):
             distracted = (self.mode == FocusMode.DISTRACTED)
 
             # Create state tuple for efficient comparison
+            # Note: timer_blink_on is excluded because blinking should not affect mood
+            # But we include a timestamp during at-risk periods to force updates
+            time_component = int(now * 5) if not self._at_risk_period else int(now * 10)  # Force more frequent updates during at-risk
             current_mood_state = (focused, warning, distracted, self._at_risk_period,
                                 now < self._startup_until, now < self._happy_until, now < self._sad_until,
-                                self.timer_blink_on, int(now * 5))  # Reduce update frequency to 200ms
+                                time_component)
             
-            # Always update mood during at-risk period to ensure consistent flicker
-            if not initial and current_mood_state == self._last_mood_state and not self._at_risk_period:
+            # Skip update only if nothing has changed
+            if not initial and current_mood_state == self._last_mood_state:
                 return  # No mood change, skip expensive operations
             
             self._last_mood_state = current_mood_state
