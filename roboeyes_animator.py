@@ -220,15 +220,12 @@ class RoboEyeAnimator(threading.Thread):
             distracted = (self.mode == FocusMode.DISTRACTED)
 
             # Create state tuple for efficient comparison
-            # Note: timer_blink_on is excluded because blinking should not affect mood
-            # But we include a timestamp during at-risk periods to force updates
-            time_component = int(now * 5) if not self._at_risk_period else int(now * 10)  # Force more frequent updates during at-risk
             current_mood_state = (focused, warning, distracted, self._at_risk_period,
                                 now < self._startup_until, now < self._happy_until, now < self._sad_until,
-                                time_component)
+                                int(now * 5))  # 200ms update frequency
             
-            # Skip update only if nothing has changed
-            if not initial and current_mood_state == self._last_mood_state:
+            # Skip update only if nothing has changed AND we're not in at-risk period
+            if not initial and current_mood_state == self._last_mood_state and not self._at_risk_period:
                 return  # No mood change, skip expensive operations
             
             self._last_mood_state = current_mood_state
@@ -348,16 +345,10 @@ class RoboEyeAnimator(threading.Thread):
         """Update at-risk period state based on blinking and timer changes."""
         now_time = time.perf_counter()
         
+        # Once we start blinking, we're at risk until timer resets or we switch modes
         if blink_on:
             self._at_risk_period = True
             self._last_blink_time = now_time
-        elif self._at_risk_period and not blink_on:
-            # During at-risk period, keep it active even when not blinking
-            # Only auto-timeout if no blink activity for too long
-            if now_time - self._last_blink_time > self.AT_RISK_TIMEOUT:
-                self._at_risk_period = False
-                # Also clear flicker state when ending at-risk period
-                self._warning_shake_on_until = 0.0
         
         # Timer reset to 00:00 - completely clear at-risk state and flicker
         if text == "00:00" and prev_text != "00:00":
