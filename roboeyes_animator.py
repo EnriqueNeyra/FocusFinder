@@ -176,9 +176,12 @@ class RoboEyeAnimator(threading.Thread):
             else:
                 self.mode = FocusMode.DISTRACTED
             
-            # Clear at-risk state when leaving distracted mode
+            # Clear at-risk state and flicker when leaving distracted mode
             if self.mode != FocusMode.DISTRACTED:
                 self._at_risk_period = False
+                self._warning_shake_on_until = 0.0
+                # Also ensure flicker is turned off immediately
+                self.eyes.horiz_flicker(False)
         self._apply_mood()
 
     def set_timer(self, text: str, blink_on: bool):
@@ -261,8 +264,17 @@ class RoboEyeAnimator(threading.Thread):
                             desired_mood = CURIOUS
                             self.eyes.set_idle_mode(True, interval=1, variation=1)
 
+                # Override mood if in sad state, but ensure clean transition afterward
                 if now < self._sad_until:
                     desired_mood = TIRED
+                elif now >= self._sad_until and self._sad_until > 0.0:
+                    # Just finished being sad - clear any lingering at-risk state
+                    if self._at_risk_period and not self.timer_blink_on:
+                        # Only clear if we're not actively blinking
+                        current_time = time.perf_counter()
+                        if current_time - self._last_blink_time > 1.0:  # 1 second grace period
+                            self._at_risk_period = False
+                            self._warning_shake_on_until = 0.0
 
             if self.eyes.mood != desired_mood:
                 self.eyes.mood = desired_mood
@@ -337,16 +349,27 @@ class RoboEyeAnimator(threading.Thread):
             self._at_risk_period = True
             self._last_blink_time = now_time
         elif self._at_risk_period and not blink_on:
-            # Auto-timeout: end at-risk period if no blink activity for too long
+            # During at-risk period, keep it active even when not blinking
+            # Only auto-timeout if no blink activity for too long
             if now_time - self._last_blink_time > self.AT_RISK_TIMEOUT:
                 self._at_risk_period = False
-        elif text == "00:00" and prev_text != "00:00":
-            # Timer reset, clear at-risk state
+                # Also clear flicker state when ending at-risk period
+                self._warning_shake_on_until = 0.0
+        
+        # Timer reset to 00:00 - completely clear at-risk state and flicker
+        if text == "00:00" and prev_text != "00:00":
             self._at_risk_period = False
+            self._warning_shake_on_until = 0.0
+            self._next_warning_burst = now_time + 0.9
     
     def _apply_angry_flicker(self, now: float):
         """Apply angry flicker animation during at-risk periods."""
-        if now >= self._next_warning_burst:
-            self._warning_shake_on_until = now + self.FLICKER_DURATION
-            self._next_warning_burst = now + self.FLICKER_INTERVAL_BASE + random.uniform(0.0, 0.3)
-        self.eyes.horiz_flicker(now < self._warning_shake_on_until, amplitude=2)
+        if self._at_risk_period:
+            if now >= self._next_warning_burst:
+                self._warning_shake_on_until = now + self.FLICKER_DURATION
+                self._next_warning_burst = now + self.FLICKER_INTERVAL_BASE + random.uniform(0.0, 0.3)
+            self.eyes.horiz_flicker(now < self._warning_shake_on_until, amplitude=2)
+        else:
+            # Ensure flicker is turned off when not at risk
+            self.eyes.horiz_flicker(False)
+            self._warning_shake_on_until = 0.0
