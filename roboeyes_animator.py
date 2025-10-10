@@ -263,17 +263,9 @@ class RoboEyeAnimator(threading.Thread):
                             desired_mood = CURIOUS
                             self.eyes.set_idle_mode(True, interval=1, variation=1)
 
-                # Override mood if in sad state, but ensure clean transition afterward
+                # Override mood if in sad state
                 if now < self._sad_until:
                     desired_mood = TIRED
-                elif now >= self._sad_until and self._sad_until > 0.0:
-                    # Just finished being sad - clear any lingering at-risk state
-                    if self._at_risk_period and not self.timer_blink_on:
-                        # Only clear if we're not actively blinking
-                        current_time = time.perf_counter()
-                        if current_time - self._last_blink_time > 1.0:  # 1 second grace period
-                            self._at_risk_period = False
-                            self._warning_shake_on_until = 0.0
 
             if self.eyes.mood != desired_mood:
                 self.eyes.mood = desired_mood
@@ -344,8 +336,9 @@ class RoboEyeAnimator(threading.Thread):
         """Update at-risk period state based on blinking and timer changes."""
         now_time = time.perf_counter()
         
-        # Once we start blinking, we're at risk until timer resets or we switch modes
-        if blink_on:
+        # If we receive ANY blink call (True or False), we're in an active blinking sequence
+        # Stay at risk during the entire sequence
+        if blink_on or (self._at_risk_period and not blink_on):
             self._at_risk_period = True
             self._last_blink_time = now_time
         
