@@ -1,4 +1,4 @@
-# FocusFinder — A Productivity Tracking Tool, Implementing a Transparent OLED + Pi Camera Module, and Powered by Python OpenCV + Raspberry Pi
+# FocusFinder — A Desk Productivity Helper, Using a Transparent OLED + Pi Camera Module, Powered Raspberry Pi + Python OpenCV
 
 <img width="1633" height="999" alt="image" src="https://github.com/user-attachments/assets/1f1b2b09-88cc-4f34-92ae-d8a03c3a54cc" />  
 <!--- https://github.com/user-attachments/assets/f6f684d5-3cc5-4730-a2d7-3b7bf26ac90d --->
