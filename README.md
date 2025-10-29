@@ -1,6 +1,7 @@
 # FocusFinder — A Productivity Tracking Tool, Implementing a Transparent OLED + Pi Camera Module, and Powered by Python OpenCV + Raspberry Pi
 
-<img width="1633" height="999" alt="image" src="https://github.com/user-attachments/assets/f6f684d5-3cc5-4730-a2d7-3b7bf26ac90d" />  
+<img width="1633" height="999" alt="image" src="https://github.com/user-attachments/assets/1f1b2b09-88cc-4f34-92ae-d8a03c3a54cc" />  
+<!--- https://github.com/user-attachments/assets/f6f684d5-3cc5-4730-a2d7-3b7bf26ac90d --->
 
 ### The **FocusFinder** is a small desktop productivity tracker/timer that uses a Transparent OLED with a Pi camera module hidden behind it. The FocusFinder uses Python OpenCV to track focus through face detection. 
 ### The timer will count up if you are focused on the screen/monitor in front of you. Spend too much time looking away, and the timer will reset!
@@ -11,7 +12,7 @@
 - [Required Hardware](#required-hardware)
 - [Pi Setup](#pi-setup)
 - [Assembly](#assembly)
-- [Using the FocusFinder](#using-the-frame)
+- [Using FocusFinder](#using-focusfinder)
 
 ---
 
@@ -22,13 +23,15 @@
 | Raspberry Pi Zero 2 W | [Amazon](https://amzn.to/3YBvaBV) |
 | Pi Power Supply | [Amazon](https://amzn.to/42dMak0) |
 | Waveshare 1.54" Transparent OLED  | [Amazon](https://amzn.to/4jjJQNH) |
-| Pi Camera Module V2.1  | [Amazon](https://amzn.to/4keIu8i) |
+| Arducam Pi Camera Module V2  | [Amazon](https://amzn.to/3WtWmBk) |
 | Micro SD Card (for Pi OS image) | [Amazon](https://amzn.to/3Z0md5n) |
 | Enclosure 3D Print Files | [Printables](https://www.printables.com/model/1381066-focus-timer) |
 
-<p align="center"><img src="https://github.com/user-attachments/assets/17d8eb2a-0daf-4b2d-9818-d128d05cf1a2" width="700"></p>
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/d6c2cf2b-c63b-4921-aac8-436558935e4c" width="48%">
+  <img src="https://github.com/user-attachments/assets/0821d3cb-df40-4a72-b2a1-0dd9873f9ca7" width="48%">
+</p>
 
----
 
 ## Pi Setup
 
@@ -56,33 +59,33 @@ Be sure to **reboot** the Pi after the setup script completes.
 ## Assembly
 
 ### 1. Attach the Pi Camera Module to the Pi Zero 2W
-<p align="center"><img src="https://github.com/user-attachments/assets/932353ec-4a00-4396-a531-db8d7ce37923" width="700"></p>
+<p align="center"><img src="https://github.com/user-attachments/assets/ec961bdc-30c5-4786-a86c-816595282d59" width="700"></p>
 
 ### 2. Wire the OLED Display + Driver Board to the [Appropriate Pi Pin Headers](https://www.waveshare.com/wiki/1.51inch_Transparent_OLED#Hardware_connection)
-<p align="center"><img src="https://github.com/user-attachments/assets/b51d8fce-9536-4238-be88-17283b0e1948" width="700"></p>
+<p align="center"><img src="https://github.com/user-attachments/assets/612fa4d0-b570-4eef-b0b2-a1798f7c4b53" width="700"></p>
 
 ### 3. Insert the Pi Into the Base of the Enclosure
-<p align="center"><img src="https://github.com/user-attachments/assets/c7d38f4a-1e7d-4249-9dbf-10f76a347c93" width="700"></p>
+<p align="center"><img src="https://github.com/user-attachments/assets/b9720704-1d30-434e-aa53-e2e81e823a92" width="700"></p>
 
-### 4. Place the Driver Board into the Rear Slot and Tuck Wires
-<p align="center"><img src="https://github.com/user-attachments/assets/8d90bb13-36ea-4bee-9e2f-e6ddf2cadc6f" width="700"></p>
+### 4. Slot Display into Display/Camera Holder
+<p align="center"><img src="https://github.com/user-attachments/assets/0a0e8a1a-9691-4217-96db-34e10a57ea1a" width="700"></p>
 
-### 5. Slot Display into Display/Camera Holder
-<p align="center"><img src="https://github.com/user-attachments/assets/dad7fada-553c-40b0-be0d-0e0b53b0061e" width="700"></p>
+### 5. Slot Camera into Display/Camera Holder
+<p align="center"><img src="https://github.com/user-attachments/assets/8a65e2a6-d7b7-4068-af9d-f802761fbe5c" width="700"></p>
 
-### 6. Slot Camera into Display/Camera Holder
-<p align="center"><img src="https://github.com/user-attachments/assets/6631f0ee-7342-4e55-a98b-9eba4c7aa4fb" width="700"></p>
+### 6. Secure Display/Camera Holder to Base
+<p align="center"><img src="https://github.com/user-attachments/assets/fb09dd8a-c53b-4391-a5bc-1c72f37a2aed" width="700"></p>
 
-### 7. Secure Display/Camera Holder to Base and Attach Enclosure Cover
-<p align="center"><img src="https://github.com/user-attachments/assets/4097dedf-6115-4c59-a6fe-8280504380c3" width="700"></p>
-<p align="center"><img src="https://github.com/user-attachments/assets/19f7288c-768e-4e1c-ac34-68a47e7dc2f9" width="700"></p>
+### 7. Place the Display Driver Board into the Rear Slot, Tuck Wires, and Attach Enclosure Cover
+<p align="center"><img src="https://github.com/user-attachments/assets/d0c952c6-68ad-46dd-8ed0-06403e491481" width="700"></p>
+<p align="center"><img src="https://github.com/user-attachments/assets/451485cd-8236-41b0-a6d5-85b735af0141" width="700"></p>
 
 ### Assembly is now complete!
-<p align="center"><img src="https://github.com/user-attachments/assets/f6f684d5-3cc5-4730-a2d7-3b7bf26ac90d" width="700"></p>
+<p align="center"><img src="https://github.com/user-attachments/assets/fcf0a72d-e128-4cfc-baa7-99e4690f7e58" width="700"></p>
 
 ---
 
-## Using the FocusFinder
+## Using FocusFinder
 
 Connect the power cable to the Pi. Place it on a flat surface on your desk, directly in front of you. Angle the display so that it is aimed squarely at your face, and ensure that there is sufficient lighting on your face. Poor lighting will prevent your face from being detected.
 From the initial state (00:00), you must be 'focused' and looking in front of you for ~3 seconds before the timer will begin counting. When 'unfocused' and looking away, there is a grace period of ~10 seconds before the timer will reset.
