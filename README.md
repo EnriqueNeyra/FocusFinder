@@ -88,4 +88,22 @@ Be sure to **reboot** the Pi after the setup script completes.
 ## Using FocusFinder
 
 Connect the power cable to the Pi. Place it on a flat surface on your desk, directly in front of you. Angle the display so that it is aimed squarely at your face, and ensure that there is sufficient lighting on your face. Poor lighting will prevent your face from being detected.
-From the initial state (00:00), you must be 'focused' and looking in front of you for ~3 seconds before the timer will begin counting. When 'unfocused' and looking away, there is a grace period of ~10 seconds before the timer will reset.
+From the initial state (00:00), you must be 'focused' and looking in front of you for ~3 seconds before the timer will begin counting. When 'distracted' and looking away, there is a grace period of ~10 seconds before the timer will reset.
+
+### Here is a summary of the different states of the Focus Finder
+
+#### When the user is idle or away from desk, the timer stays at 00:00, and the eyes will look around curiously 
+
+#### When the user's face is detected for more than ~3s, the timer begins counting. Eyes will occasionally show 'happy'
+
+#### When the user is 'distracted' (face not detected or looking off too far to either side), eyes will show 'mad/upset', and 'DISTRACTED' text will show. 
+
+#### If the user becomes 'focused' again in under ~10s, the timer will keep counting. 
+
+#### If the user remains 'distracted' for greater than ~10s, the timer will reset, and eyes will show 'sad'
+
+
+### Credits
+This project uses the [micropython-roboeyes](https://github.com/mchobby/micropython-roboeyes) library  
+© 2018 MCHobby, licensed under the GNU General Public License v3.0 (GPL-3.0).  
+See the [LICENSE](https://github.com/mchobby/micropython-roboeyes/blob/main/LICENSE.txt) file in their repository for details.
