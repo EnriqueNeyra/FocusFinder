@@ -90,17 +90,23 @@ Be sure to **reboot** the Pi after the setup script completes.
 Connect the power cable to the Pi. Place it on a flat surface on your desk, directly in front of you. Angle the display so that it is aimed squarely at your face, and ensure that there is sufficient lighting on your face. Poor lighting will prevent your face from being detected.
 From the initial state (00:00), you must be 'focused' and looking in front of you for ~3 seconds before the timer will begin counting. When 'distracted' and looking away, there is a grace period of ~10 seconds before the timer will reset.
 
-### Here is a summary of the different states of the Focus Finder
+### Below is a summary of the different states of Focus Finder
 
 #### When the user is idle or away from desk, the timer stays at 00:00, and the eyes will look around curiously 
+![GitHub GIF Idle](https://github.com/user-attachments/assets/ef831756-cf41-49e5-b8e5-110ec7c91546)  
+
 
 #### When the user's face is detected for more than ~3s, the timer begins counting. Eyes will occasionally show 'happy'
+![Github GIF Active](https://github.com/user-attachments/assets/6a7ed84b-1acf-477f-9ad6-c48413fa44d3)  
+
 
 #### When the user is 'distracted' (face not detected or looking off too far to either side), eyes will show 'mad/upset', and 'DISTRACTED' text will show. 
-
 #### If the user becomes 'focused' again in under ~10s, the timer will keep counting. 
+![Github GIF Distracted Without Reset](https://github.com/user-attachments/assets/a9afa4be-8639-4832-a024-c23a851be9ac)  
+
 
 #### If the user remains 'distracted' for greater than ~10s, the timer will reset, and eyes will show 'sad'
+![Github GIF Distracted With Reset](https://github.com/user-attachments/assets/5392530f-364c-40cc-a89b-6f3700410134)  
 
 
 ### Credits
